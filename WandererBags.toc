@@ -13,6 +13,8 @@
 ## Notes-zhTW: 把背包放進一個 Wanderer 視窗：依類別或逐個背包排列，可搜尋，顯示物品等級，並以 Wanderer 的綠色箭頭標出更適合你的裝備。
 ## Category: Inventory
 ## Version: 0.1.0
+## X-Curse-Project-ID: 1736973
+## X-Wago-ID: rN4rYwKD
 ## Author: Jaekco
 ## IconTexture: Interface\Icons\INV_Misc_Bag_07
 ## RequiredDeps: Wanderer

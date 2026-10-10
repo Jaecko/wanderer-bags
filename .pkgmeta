@@ -8,3 +8,7 @@ manual-changelog:
 
 ignore:
   - README.md
+
+# Shown on CurseForge: Wanderer Bags needs Wanderer.
+required-dependencies:
+  - wanderer
