@@ -1,0 +1,10 @@
+# BigWigs packager: the zip is the addon folder "WandererBags", the changelog of the
+# version is CHANGELOG.md (written at each release from the full changelog).
+package-as: WandererBags
+
+manual-changelog:
+  filename: CHANGELOG.md
+  markup-type: markdown
+
+ignore:
+  - README.md

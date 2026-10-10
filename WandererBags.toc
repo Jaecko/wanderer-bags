@@ -1,0 +1,25 @@
+## Interface: 16001
+## Title: Wanderer Bags
+## Notes: Your bags in one Wanderer window: sorted by kind or bag by bag, searchable, with the item level and Wanderer's green arrow on what is better for you.
+## Notes-frFR: Vos sacs dans une fenêtre Wanderer : rangés par genre ou sac par sac, avec la recherche, le niveau d'objet et la flèche verte de Wanderer sur ce qui vous va mieux.
+## Notes-deDE: Deine Taschen in einem Wanderer-Fenster: nach Art oder Tasche geordnet, durchsuchbar, mit Gegenstandsstufe und dem grünen Pfeil von Wanderer auf dem, was dir besser passt.
+## Notes-esES: Tus bolsas en una ventana de Wanderer: por tipo o bolsa por bolsa, con búsqueda, nivel de objeto y la flecha verde de Wanderer en lo que te va mejor.
+## Notes-esMX: Tus bolsas en una ventana de Wanderer: por tipo o bolsa por bolsa, con búsqueda, nivel de objeto y la flecha verde de Wanderer en lo que te va mejor.
+## Notes-itIT: Le tue borse in una finestra di Wanderer: per tipo o borsa per borsa, con la ricerca, il livello oggetto e la freccia verde di Wanderer su ciò che ti sta meglio.
+## Notes-ptBR: Suas bolsas numa janela do Wanderer: por tipo ou bolsa por bolsa, com busca, nível do item e a seta verde do Wanderer no que fica melhor para você.
+## Notes-ruRU: Ваши сумки в одном окне Wanderer: по видам или по сумкам, с поиском, уровнем предметов и зелёной стрелкой Wanderer на том, что вам лучше.
+## Notes-koKR: 가방을 Wanderer 창 하나에: 종류별 또는 가방별 정리, 검색, 아이템 레벨, 더 좋은 장비에 Wanderer의 초록 화살표.
+## Notes-zhCN: 把背包放进一个 Wanderer 窗口：按类别或逐个背包排列，可搜索，显示物品等级，并以 Wanderer 的绿色箭头标出更适合你的装备。
+## Notes-zhTW: 把背包放進一個 Wanderer 視窗：依類別或逐個背包排列，可搜尋，顯示物品等級，並以 Wanderer 的綠色箭頭標出更適合你的裝備。
+## Category: Inventory
+## Version: 0.1.0
+## Author: Jaekco
+## IconTexture: Interface\Icons\INV_Misc_Bag_07
+## RequiredDeps: Wanderer
+## SavedVariables: WandererBagsDB
+## X-Website: https://wanderer-addon.com
+
+Locales.lua
+Inventory.lua
+Bags.lua
+Bank.lua
