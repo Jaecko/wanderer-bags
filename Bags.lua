@@ -15,16 +15,7 @@ local function On()
 end
 ns.On = On
 
-local function Bags()
-	local list = {}
-	for bag = 0, (NUM_BAG_SLOTS or 4) do list[#list + 1] = bag end
-	-- The reagent bag, where the game has one.
-	local reagent = Enum and Enum.BagIndex and Enum.BagIndex.ReagentBag
-	if reagent and reagent > (NUM_BAG_SLOTS or 4) and ns.NumSlots(reagent) > 0 then
-		list[#list + 1] = reagent
-	end
-	return list
-end
+local function Bags() return U.BagIDs() end
 
 local bags = ns.NewInventory({
 	name = "WandererBags",
@@ -34,7 +25,11 @@ local bags = ns.NewInventory({
 	nameOf = function(bag) return Clean(Safe(C_Container.GetBagName, bag)) or (BAG_NAME_BACKPACK or "Bag") end,
 	point = { "BOTTOMRIGHT", UIParent, "BOTTOMRIGHT", -80, 120 },
 	sounds = { "IG_BACKPACK_OPEN", "IG_BACKPACK_CLOSE" },
+	canSell = true,
 	actions = function(window, add)
+		-- What can be done here, said once.
+		local help = ns.TextButton(window, "?", nil, L.HELP_TIP)
+		add(help)
 		if C_Container and C_Container.SortBags then
 			add(ns.TextButton(window, L.SORT, function() Safe(C_Container.SortBags) end, L.SORT_DESC))
 		end
@@ -45,6 +40,12 @@ local bags = ns.NewInventory({
 	onRefresh = function(window) window.bank:SetShown(ns.HasSavedBank()) end,
 })
 ns.Bags = bags
+ns.BagIDs = Bags
+
+-- Where an item may be sold (a merchant, the auction house): kept items are guarded there.
+function ns.Guarding()
+	return ns.auctionOpen or (W and W.IsMerchantOpen and W.IsMerchantOpen()) or false
+end
 
 -- The game's bags: Wanderer's window in their place --------------------------------------------
 
@@ -83,10 +84,12 @@ end
 
 function ns.Init()
 	if not (W and W.RegisterExtension) then return end
+	-- An older Wanderer: said once, nothing taken.
+	if (W.API or 1) < 2 then return W.Print(L.NEEDS_WANDERER) end
 	W.RegisterExtension({
 		key = "bags",
 		title = L.TITLE,
-		defaults = { enabled = true, bank = true, layout = "categories", columns = 10, iconSize = 36, itemLevel = true,
+		defaults = { enabled = true, bank = true, layout = "categories", byProfession = true, columns = 10, iconSize = 36, itemLevel = true,
 			upgrade = true, junk = true },
 		ranges = { ["bags.columns"] = { 6, 16, 1 }, ["bags.iconSize"] = { 28, 44, 2 } },
 		refresh = ns.RefreshAll,
@@ -101,6 +104,7 @@ function ns.Init()
 				{ { "categories", L.MODE_CATEGORIES }, { "bags", L.MODE_BAGS } },
 				function() return ns.Settings() and ns.Settings().layout or "categories" end,
 				function(value) if ns.Settings() then ns.Settings().layout = value; ns.RefreshAll() end end))
+			Check("byProfession", L.BY_PROFESSION, L.BY_PROFESSION_DESC)
 			Sub(o.Slider("BAGS_COLUMNS", L.COLUMNS, "bags.columns", "%d", ns.RefreshAll))
 			Sub(o.Slider("BAGS_ICON_SIZE", L.ICON_SIZE, "bags.iconSize", "%d", ns.RefreshAll))
 			Check("itemLevel", L.ITEM_LEVEL, L.ITEM_LEVEL_DESC)
@@ -113,14 +117,19 @@ function ns.Init()
 		end,
 	})
 	TakeBags()
+	if ns.InitMarks then ns.InitMarks() end
 	if ns.InitBank then ns.InitBank() end
 	local events = CreateFrame("Frame")
 	for _, event in ipairs({ "BAG_UPDATE_DELAYED", "ITEM_LOCK_CHANGED", "BAG_UPDATE_COOLDOWN", "PLAYER_MONEY",
 		"QUEST_ACCEPTED", "UNIT_QUEST_LOG_CHANGED", "MERCHANT_SHOW", "MERCHANT_CLOSED", "PLAYER_EQUIPMENT_CHANGED",
-		"BAG_NEW_ITEMS_UPDATED", "BANK_TABS_CHANGED" }) do
+		"BAG_NEW_ITEMS_UPDATED", "BANK_TABS_CHANGED", "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED" }) do
 		pcall(events.RegisterEvent, events, event)
 	end
-	events:SetScript("OnEvent", function()
+	events:SetScript("OnEvent", function(_, event)
+		if event == "AUCTION_HOUSE_SHOW" then
+			ns.auctionOpen = true
+			if ns.SyncAuctionator then ns.SyncAuctionator() end
+		elseif event == "AUCTION_HOUSE_CLOSED" then ns.auctionOpen = false end
 		for _, inventory in ipairs(ns.INVENTORIES) do inventory.Soon() end
 	end)
 end
