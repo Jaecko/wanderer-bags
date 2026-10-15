@@ -1,16 +1,13 @@
-# Wanderer Bags 0.2.0
-
-Needs Wanderer 0.40 or later.
+# Wanderer Bags 0.3.0
 
 ### New
-- Alt+click an item: keep it (a padlock: never sold, neither to a merchant nor at the auction house, until you free it), set it aside for the auction house, mark it as junk, or put it in a section of your own.
-- Kept items gather in their own section, at the bottom of your bags.
-- Sections of your own: named as you like, renamed or removed with a right click; any section folds with a click on its title.
-- Crafting reagents by profession: one section for each of yours, then what your other characters use, then what only other professions use, just before the junk (an option).
-- At a merchant, a Sell link beside the junk and the sections you may sell; the game's Sell All Junk follows your marks.
-- The value of a section at a merchant, and at the auction house when its prices are known (Wanderer Auction or Auctionator).
-- Auctionator: what you keep is hidden from its selling list, what you set aside for the auction house comes first.
-- At the auction house, an item's menu searches it there (with Wanderer Auction).
+- Select (a button beside the search): choose one item or several with a click, Shift+click for a run, All or None, then act on them all from a bar under the squares: keep, for the auction house, junk, a section of yours, free.
+- From the same bar: sell them at a merchant (what you keep and what is for the auction house left aside), deposit them at the banker, search one at the auction house (with Wanderer Auction).
+- No need to know Alt+click any more: the bar does the same, for one item or many.
 
 ### Changed
-- Items set aside for the auction house are never sold to a merchant, the junk included.
+- The links at the top of your bags in a clearer order: the bank, the sorting, how they are shown, then the help.
+- Lighter, in a fight above all: a cooldown, an item taken by the cursor or your money change only what they touch, no longer the whole window; the search no longer reads your bags again at each letter; the bank is kept once a moment at the banker.
+
+### Fixed
+- The glow of a new item no longer stays on a slot once emptied.

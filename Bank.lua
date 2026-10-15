@@ -211,7 +211,7 @@ bank = ns.NewInventory({
 			window.freeText:SetText(store and L.BANK_SEEN:format(Ago(store.time)) or "")
 			return
 		end
-		Snapshot(bankType, items)
+		ns.KeepSoon(bankType, items)
 		-- No tab yet: the game's window says how to buy one.
 		if total == 0 and not gameShown then
 			gameShown = true
@@ -225,6 +225,9 @@ bank = ns.NewInventory({
 })
 ns.Bank = bank
 
+-- At the banker (what is chosen in the bags can go into the bank).
+function ns.AtBank() return atBank end
+
 -- The bank as it was, from the bags: there is one to show, and showing it.
 function ns.HasSavedBank()
 	local types = Types()
@@ -237,6 +240,27 @@ function ns.ToggleSavedBank()
 	local types = Types()
 	bankType = Shelf(types.Character) and types.Character or types.Account
 	bank.Open()
+end
+
+-- The bank kept at most once a moment (each change at the banker draws it again): the last one read;
+-- at once when another bank is shown or the banker left.
+local keeping
+function ns.KeepSoon(kind, items)
+	if keeping and (kind == nil or keeping.kind ~= kind) then
+		Snapshot(keeping.kind, keeping.items)
+		keeping = nil
+	end
+	if kind == nil then return end
+	local first = not keeping
+	keeping = { kind = kind, items = items }
+	if first then
+		C_Timer.After(1, function()
+			if keeping then
+				Snapshot(keeping.kind, keeping.items)
+				keeping = nil
+			end
+		end)
+	end
 end
 
 local function Opened()
@@ -253,6 +277,7 @@ local function Opened()
 end
 
 local function Closed()
+	ns.KeepSoon()
 	atBank, gameShown = false, false
 	bank.Close()
 	HideGameBank()

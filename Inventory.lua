@@ -155,6 +155,10 @@ function ns.NewInventory(spec)
 	local buttons = pools.live
 	local NumSlots = spec.numSlots or ns.NumSlots
 	local pending = false
+	-- The selection (spec.selectable): a click chooses an item instead of using it, the bar acts on all chosen.
+	local selecting, picked, shown, lastPicked = false, {}, {}, nil
+	local selectButton, bar
+	local function Key(item) return item.bag .. ":" .. item.slot end
 
 	local function BagFrame(bag)
 		local frame = bagFrames[bag]
@@ -237,7 +241,58 @@ function ns.NewInventory(spec)
 		return button
 	end
 
+	-- Over a square while selecting: a click chooses it (Shift: every item from the last one chosen), its tooltip
+	-- still there; chosen, a light gold veil and a check.
+	local function Pick(button)
+		if button.wandererPick then return button.wandererPick end
+		local pick = CreateFrame("Button", nil, button)
+		pick:SetAllPoints()
+		pick:SetFrameLevel(button:GetFrameLevel() + 10)
+		pick:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+		pick.veil = pick:CreateTexture(nil, "OVERLAY")
+		pick.veil:SetAllPoints()
+		pick.veil:SetColorTexture(1, 0.82, 0, 0.22)
+		pick.edges = {}
+		for index, point in ipairs({ { "TOPLEFT", "TOPRIGHT" }, { "BOTTOMLEFT", "BOTTOMRIGHT" }, { "TOPLEFT", "BOTTOMLEFT" }, { "TOPRIGHT", "BOTTOMRIGHT" } }) do
+			local edge = pick:CreateTexture(nil, "OVERLAY", nil, 1)
+			edge:SetColorTexture(1, 0.82, 0, 0.9)
+			edge:SetPoint(point[1])
+			edge:SetPoint(point[2])
+			if index <= 2 then edge:SetHeight(1) else edge:SetWidth(1) end
+			pick.edges[index] = edge
+		end
+		pick.check = pick:CreateTexture(nil, "OVERLAY", nil, 2)
+		pick.check:SetSize(16, 16)
+		pick.check:SetPoint("BOTTOMRIGHT", pick, "BOTTOMRIGHT", 2, -2)
+		pick.check:SetTexture("Interface\\Buttons\\UI-CheckBox-Check")
+		pick:SetScript("OnClick", function(frame) self.TogglePick(frame:GetParent().wandererItem, IsShiftKeyDown()) end)
+		pick:SetScript("OnEnter", function(frame)
+			local square = frame:GetParent()
+			if not square.wandererLink then return end
+			GameTooltip:SetOwner(frame, "ANCHOR_RIGHT")
+			GameTooltip:SetHyperlink(square.wandererLink)
+			GameTooltip:Show()
+		end)
+		pick:SetScript("OnLeave", function() GameTooltip:Hide() end)
+		button.wandererPick = pick
+		return pick
+	end
+
+	local function PaintPick(button, item)
+		if not (selecting and item) then
+			if button.wandererPick then button.wandererPick:Hide() end
+			return
+		end
+		local pick = Pick(button)
+		local chosen = picked[Key(item)] ~= nil
+		pick.veil:SetShown(chosen)
+		pick.check:SetShown(chosen)
+		for _, edge in ipairs(pick.edges) do edge:SetShown(chosen) end
+		pick:Show()
+	end
+
 	local function Paint(button, item, settings, query)
+		PaintPick(button, item)
 		local info = item and item.info
 		button.wandererLink = item and item.link
 		button.wandererItem = item
@@ -265,7 +320,14 @@ function ns.NewInventory(spec)
 		if SetItemButtonDesaturated then SetItemButtonDesaturated(button, info and Clean(info.isLocked) and true or false) end
 		if SetItemButtonQuality then SetItemButtonQuality(button, item and item.quality, item and item.link) end
 		if button.UpdateCooldown then pcall(button.UpdateCooldown, button, item ~= nil) end
-		if button.UpdateNewItem and item then pcall(button.UpdateNewItem, button, item.quality) end
+		if button.UpdateNewItem and item then
+			pcall(button.UpdateNewItem, button, item.quality)
+		elseif type(button.NewItemTexture) == "table" then
+			-- (an emptied slot: no glow left of what was there)
+			button.NewItemTexture:Hide()
+			if type(button.flashAnim) == "table" and button.flashAnim.Stop then button.flashAnim:Stop() end
+			if type(button.newitemglowAnim) == "table" and button.newitemglowAnim.Stop then button.newitemglowAnim:Stop() end
+		end
 		if button.UpdateQuestItem then
 			local quest = item and type(item.quest) == "table" and item.quest
 			pcall(button.UpdateQuestItem, button, quest and Clean(quest.isQuestItem), quest and Clean(quest.questID),
@@ -387,6 +449,13 @@ function ns.NewInventory(spec)
 				if item then items[#items + 1] = item else empty[#empty + 1] = { bag = bag, slot = slot } end
 			end
 		end
+		-- The chosen ones still there (the same item in the same slot); the others let go.
+		local here = {}
+		for _, item in ipairs(items) do here[Key(item)] = item end
+		for key, item in pairs(picked) do
+			local now = here[key]
+			picked[key] = now and now.id == item.id and now or nil
+		end
 		-- Squares of containers gone or smaller: hidden.
 		for bag, list in pairs(buttons) do
 			for slot, button in pairs(list) do
@@ -465,10 +534,20 @@ function ns.NewInventory(spec)
 		end
 		local height = sections[1] and Layout(sections, settings) or settings.iconSize
 		if not sections[1] then for index = 1, #headers do headers[index]:Hide() end end
+		-- The items as drawn, in their order (Shift+click chooses a run of them).
+		shown = {}
+		for _, section in ipairs(sections) do
+			if not (section.key and ns.IsFolded(section.key)) then
+				for _, button in ipairs(section.buttons) do
+					if button.wandererItem then shown[#shown + 1] = button.wandererItem end
+				end
+			end
+		end
 		local margin = W.Skin.Margin() + 8
 		local width = math.max(settings.columns * (settings.iconSize + GAP) - GAP, 260)
 		content:SetSize(width, height)
-		window:SetSize(width + margin * 2, height + TOP_ROOM + BOTTOM_ROOM + margin * 2)
+		local barHeight = bar and self.LayoutBar(width) or 0
+		window:SetSize(width + margin * 2, height + TOP_ROOM + BOTTOM_ROOM + barHeight + margin * 2)
 		freeText:SetText(L.FREE:format(#empty, total))
 		moneyText:SetText(U.Coins(spec.money and spec.money() or Clean(Safe(GetMoney)) or 0))
 		modeButton:SetLabel(settings.layout == "bags" and L.MODE_CATEGORIES or L.MODE_BAGS)
@@ -499,6 +578,203 @@ function ns.NewInventory(spec)
 		C_Timer.After(REFRESH_DELAY, self.Refresh)
 	end
 
+	-- What changes often, touched alone (no drawing again): each button shown.
+	local function EachShown(fn)
+		for _, pool in pairs(pools) do
+			for _, list in pairs(pool) do
+				for _, button in pairs(list) do
+					if button:IsShown() then fn(button) end
+				end
+			end
+		end
+	end
+
+	-- The cooldowns (each global cooldown in a fight).
+	function self.Cooldowns()
+		if not (window and window:IsShown()) then return end
+		EachShown(function(button)
+			if button.UpdateCooldown then pcall(button.UpdateCooldown, button, button.wandererItem ~= nil) end
+		end)
+	end
+
+	-- An item taken or let go by the cursor: its button alone.
+	function self.Lock(bag, slot)
+		if not (window and window:IsShown()) then return end
+		local button = bag and slot and pools.live[bag] and pools.live[bag][slot]
+		if not (button and button:IsShown() and SetItemButtonDesaturated) then return end
+		local info = Safe(C_Container.GetContainerItemInfo, bag, slot)
+		SetItemButtonDesaturated(button, type(info) == "table" and Clean(info.isLocked) and true or false)
+	end
+
+	-- Your money.
+	function self.Money()
+		if moneyText and window:IsShown() then moneyText:SetText(U.Coins(spec.money and spec.money() or Clean(Safe(GetMoney)) or 0)) end
+	end
+
+	-- The search: what does not match steps back (nothing read again).
+	function self.Search()
+		if not (window and window:IsShown()) then return end
+		local query = (searchBox:GetText() or ""):lower()
+		EachShown(function(button)
+			local item = button.wandererItem
+			local match = not item or Matches(item, query)
+			if button.SetMatchesSearch then button:SetMatchesSearch(match) else button:SetAlpha(match and 1 or 0.25) end
+		end)
+	end
+
+	-- The selection ---------------------------------------------------------------------------
+
+	-- An item chosen or let go; with Shift, every item drawn from the last one chosen to this one.
+	function self.TogglePick(item, run)
+		if not item then return end
+		if run and lastPicked then
+			local from, to
+			for index, other in ipairs(shown) do
+				if Key(other) == lastPicked then from = index end
+				if Key(other) == Key(item) then to = index end
+			end
+			if from and to then
+				for index = math.min(from, to), math.max(from, to) do picked[Key(shown[index])] = shown[index] end
+				lastPicked = Key(item)
+				return self.Refresh()
+			end
+		end
+		local key = Key(item)
+		picked[key] = not picked[key] and item or nil
+		lastPicked = picked[key] and key or lastPicked
+		if U.PlaySound then U.PlaySound("IG_MAINMENU_OPTION_CHECKBOX_ON") end
+		self.Refresh()
+	end
+
+	function self.SetSelecting(on)
+		selecting = on and true or false
+		wipe(picked)
+		lastPicked = nil
+		if selectButton then selectButton:SetText(selecting and L.SELECT_DONE or L.SELECT) end
+		if window and window:IsShown() then self.Refresh() end
+	end
+
+	local function Chosen()
+		local list, ids, seen = {}, {}, {}
+		for _, item in pairs(picked) do
+			list[#list + 1] = item
+			if item.id and not seen[item.id] then seen[item.id], ids[#ids + 1] = true, item.id end
+		end
+		table.sort(list, function(a, b) return a.bag * 1000 + a.slot < b.bag * 1000 + b.slot end)
+		return list, ids
+	end
+
+	local function Clear()
+		wipe(picked)
+		lastPicked = nil
+		self.Refresh()
+	end
+
+	-- Into the bank, one after another (the banker open).
+	local function Deposit(list)
+		local index = 0
+		local function Next()
+			index = index + 1
+			local item = list[index]
+			if not (item and ns.AtBank and ns.AtBank()) then return end
+			Safe(Container().UseContainerItem, item.bag, item.slot)
+			C_Timer.After(0.15, Next)
+		end
+		Next()
+	end
+
+	-- What the bar offers, in two lines: what can be done here first (at a merchant, the banker, the auction
+	-- house), then your say over the items, always.
+	local ACTIONS = {
+		{ key = "sell", group = "here", label = "ACT_SELL", when = function() return spec.canSell and W.IsMerchantOpen and W.IsMerchantOpen() end,
+			run = function(list)
+				-- What you keep, and what is for the auction house, never goes to a merchant.
+				local sold, aside = {}, 0
+				for _, item in ipairs(list) do
+					if ns.IsKept(item.id) or ns.IsForAuction(item.id) then aside = aside + 1 else sold[#sold + 1] = item end
+				end
+				if sold[1] and W.SellItems then W.SellItems(sold) end
+				if aside > 0 and W.Print then W.Print(L.SKIPPED:format(aside)) end
+			end },
+		{ key = "deposit", group = "here", label = "ACT_DEPOSIT", when = function() return spec.canSell and ns.AtBank and ns.AtBank() end,
+			run = function(list) Deposit(list) end },
+		{ key = "search", group = "here", label = "ACT_SEARCH", when = function(count)
+				local frame = _G.AuctionHouseFrame
+				return count == 1 and type(WandererAuction) == "table" and WandererAuction.Search and frame and frame:IsShown()
+			end,
+			run = function(list) if list[1].name ~= "" then WandererAuction.Search(list[1].name) end end },
+		{ key = "keep", group = "marks", label = "ACT_KEEP", run = function(_, ids) ns.MarkMany(ids, "keep") end },
+		{ key = "auction", group = "marks", label = "ACT_AUCTION", run = function(_, ids) ns.MarkMany(ids, "auction") end },
+		{ key = "junk", group = "marks", label = "ACT_JUNK", run = function(_, ids) ns.MarkMany(ids, "junk") end },
+		{ key = "section", group = "marks", label = "ACT_SECTION", keep = true, run = function(_, ids, link) ns.SectionsMenu(link, ids, Clear) end },
+		{ key = "free", group = "marks", label = "ACT_FREE", run = function(_, ids) ns.FreeMany(ids) end },
+	}
+
+	-- The bar, under the squares while selecting: how many are chosen, all or none, then what to do with them.
+	-- Returns its height (0 when not selecting).
+	function self.LayoutBar(width)
+		if not selecting then
+			bar:Hide()
+			return 0
+		end
+		local count = 0
+		for _ in pairs(picked) do count = count + 1 end
+		bar.count:SetText(count > 0 and L.PICKED:format(count) or L.PICK_HINT)
+		local x, y, line, group = 0, 22, 18, nil
+		for _, action in ipairs(ACTIONS) do
+			local link = bar.links[action.key]
+			local show = not action.when or action.when(count) or false
+			link:SetShown(show)
+			if show then
+				link:SetAlpha(count > 0 and 1 or 0.45)
+				local w = link:GetWidth() or 60
+				-- A new line for each group, and when the width is full.
+				if x > 0 and (x + w > width or action.group ~= group) then x, y = 0, y + line end
+				group = action.group
+				link:ClearAllPoints()
+				link:SetPoint("TOPLEFT", bar, "TOPLEFT", x - 5, -y)
+				x = x + w + 4
+			end
+		end
+		local height = y + line + 6
+		bar:SetSize(width, height)
+		bar:Show()
+		return height
+	end
+
+	local function CreateBar(margin)
+		bar = CreateFrame("Frame", nil, window)
+		bar:SetPoint("BOTTOMLEFT", window, "BOTTOMLEFT", margin, margin + BOTTOM_ROOM)
+		bar.rule = bar:CreateTexture(nil, "ARTWORK")
+		bar.rule:SetColorTexture(1, 0.82, 0, 0.2)
+		bar.rule:SetHeight(1)
+		bar.rule:SetPoint("TOPLEFT")
+		bar.rule:SetPoint("TOPRIGHT")
+		bar.count = W.Skin.CreateText(bar, "GameTooltipTextSmall", 0.85, 0.78, 0.6)
+		bar.count:SetPoint("TOPLEFT", bar, "TOPLEFT", 0, -6)
+		bar.none = ns.TextButton(bar, L.SELECT_NONE, Clear)
+		bar.none:SetPoint("TOPRIGHT", bar, "TOPRIGHT", 5, -2)
+		bar.all = ns.TextButton(bar, L.SELECT_ALL, function()
+			for _, item in ipairs(shown) do picked[Key(item)] = item end
+			self.Refresh()
+		end)
+		bar.all:SetPoint("RIGHT", bar.none, "LEFT", -4, 0)
+		bar.links = {}
+		for _, action in ipairs(ACTIONS) do
+			local link
+			link = ns.TextButton(bar, L[action.label], function()
+				local list, ids = Chosen()
+				if not list[1] then return end
+				if U.PlaySound then U.PlaySound("IG_MAINMENU_OPTION_CHECKBOX_ON") end
+				action.run(list, ids, link)
+				-- Done: the selection cleared (the section's menu clears it once a choice is made).
+				if not action.keep then Clear() end
+			end, L[action.label .. "_DESC"])
+			bar.links[action.key] = link
+		end
+		bar:Hide()
+	end
+
 	local function Create()
 		window = W.Skin.CreateWindow(spec.name, "MEDIUM")
 		if spec.sounds then W.Skin.Sounds(window, spec.sounds[1], spec.sounds[2]) end
@@ -511,29 +787,62 @@ function ns.NewInventory(spec)
 		title:SetPoint("TOPLEFT", kicker, "BOTTOMLEFT", 0, -3)
 		title:SetText(spec.title)
 		window.titleText = title
-		-- Its links, right to left from the cross: by kind or by container, then the window's own.
+		-- Its links, right to left from the cross: the window's own, where it puts the choice by kind or by
+		-- container (given to it; first when it does not place it).
 		modeButton = ns.TextButton(window, L.MODE_BAGS, function()
 			local settings = ns.Settings()
 			settings.layout = settings.layout == "bags" and "categories" or "bags"
 			U.PlaySound("IG_MAINMENU_OPTION_CHECKBOX_ON")
 			ns.RefreshAll()
 		end)
-		links[1] = modeButton
+		local placed = false
 		if spec.actions then
-			spec.actions(window, function(link) links[#links + 1] = link end)
+			spec.actions(window, function(link)
+				if link == modeButton then placed = true end
+				links[#links + 1] = link
+			end, modeButton)
 		end
+		if not placed then table.insert(links, 1, modeButton) end
 		self.ChainLinks()
-		-- The search, the whole width.
+		-- Choosing several items (or one) to act on them together, without Alt: a button of its own, beside
+		-- the search, where it is seen.
+		if spec.selectable then
+			selectButton = CreateFrame("Button", spec.name .. "Select", window, "UIPanelButtonTemplate")
+			-- As wide as the longer of its two words ("Select", "Done").
+			local widest = 0
+			for _, text in ipairs({ L.SELECT_DONE, L.SELECT }) do
+				selectButton:SetText(text)
+				widest = math.max(widest, U.Measure(selectButton:GetFontString() or selectButton, "GetStringWidth", 70))
+			end
+			selectButton:SetSize(widest + 28, 22)
+			selectButton:SetPoint("RIGHT", window, "RIGHT", -margin, 0)
+			selectButton:SetPoint("TOP", title, "BOTTOM", 0, -7)
+			selectButton:SetScript("OnClick", function()
+				U.PlaySound("IG_MAINMENU_OPTION_CHECKBOX_ON")
+				self.SetSelecting(not selecting)
+			end)
+			selectButton:SetScript("OnEnter", function(button)
+				GameTooltip:SetOwner(button, "ANCHOR_BOTTOM")
+				GameTooltip:AddLine(L.SELECT_DESC, 1, 1, 1, true)
+				GameTooltip:Show()
+			end)
+			selectButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
+		end
+		-- The search, the whole width (up to the selection's button).
 		searchBox = W.Skin.CreateInput(window, spec.name .. "Search", 40)
 		searchBox:SetHeight(20)
 		searchBox:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-		searchBox:SetPoint("RIGHT", window, "RIGHT", -margin, 0)
+		if selectButton then
+			searchBox:SetPoint("RIGHT", selectButton, "LEFT", -6, 0)
+		else
+			searchBox:SetPoint("RIGHT", window, "RIGHT", -margin, 0)
+		end
 		searchBox.hint = W.Skin.CreateText(searchBox, "GameTooltipTextSmall", 0.5, 0.5, 0.5)
 		searchBox.hint:SetPoint("LEFT", searchBox, "LEFT", 8, 0)
 		searchBox.hint:SetText(L.SEARCH)
 		searchBox:SetScript("OnTextChanged", function(box)
 			box.hint:SetShown((box:GetText() or "") == "" and not box:HasFocus())
-			self.Refresh()
+			self.Search()
 		end)
 		searchBox:SetScript("OnEditFocusGained", function(box) box.hint:Hide() end)
 		searchBox:SetScript("OnEditFocusLost", function(box) box.hint:SetShown((box:GetText() or "") == "") end)
@@ -550,11 +859,18 @@ function ns.NewInventory(spec)
 		window.freeText = freeText
 		moneyText = W.Skin.CreateText(window, "GameTooltipText", 1, 1, 1)
 		moneyText:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -margin, margin)
+		if spec.selectable then CreateBar(margin) end
 		window:HookScript("OnShow", function(frame)
 			frame:SetScale(W.Skin.Scale())
 			self.Refresh()
 		end)
 		window:HookScript("OnHide", function()
+			-- Closed: the selection ends.
+			if selecting then
+				selecting = false
+				wipe(picked)
+				if selectButton then selectButton:SetText(L.SELECT) end
+			end
 			-- Closed: the new items are new no more.
 			if C_NewItems and C_NewItems.RemoveNewItem then
 				for bag, list in pairs(pools.live) do

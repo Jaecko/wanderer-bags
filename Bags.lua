@@ -22,14 +22,17 @@ local bags = ns.NewInventory({
 	title = L.TITLE,
 	on = On,
 	containers = Bags,
-	nameOf = function(bag) return Clean(Safe(C_Container.GetBagName, bag)) or (BAG_NAME_BACKPACK or "Bag") end,
+	nameOf = function(bag) return Clean(Safe(C_Container and C_Container.GetBagName, bag)) or (BAG_NAME_BACKPACK or "Bag") end,
 	point = { "BOTTOMRIGHT", UIParent, "BOTTOMRIGHT", -80, 120 },
 	sounds = { "IG_BACKPACK_OPEN", "IG_BACKPACK_CLOSE" },
 	canSell = true,
-	actions = function(window, add)
+	selectable = true,
+	-- Read left to right: the bank, the sorting, how they are shown, the help (beside the cross).
+	actions = function(window, add, mode)
 		-- What can be done here, said once.
 		local help = ns.TextButton(window, "?", nil, L.HELP_TIP)
 		add(help)
+		add(mode)
 		if C_Container and C_Container.SortBags then
 			add(ns.TextButton(window, L.SORT, function() Safe(C_Container.SortBags) end, L.SORT_DESC))
 		end
@@ -40,7 +43,6 @@ local bags = ns.NewInventory({
 	onRefresh = function(window) window.bank:SetShown(ns.HasSavedBank()) end,
 })
 ns.Bags = bags
-ns.BagIDs = Bags
 
 -- Where an item may be sold (a merchant, the auction house): kept items are guarded there.
 function ns.Guarding()
@@ -121,16 +123,27 @@ function ns.Init()
 	if ns.InitBank then ns.InitBank() end
 	local events = CreateFrame("Frame")
 	for _, event in ipairs({ "BAG_UPDATE_DELAYED", "ITEM_LOCK_CHANGED", "BAG_UPDATE_COOLDOWN", "PLAYER_MONEY",
-		"QUEST_ACCEPTED", "UNIT_QUEST_LOG_CHANGED", "MERCHANT_SHOW", "MERCHANT_CLOSED", "PLAYER_EQUIPMENT_CHANGED",
+		"QUEST_ACCEPTED", "MERCHANT_SHOW", "MERCHANT_CLOSED", "PLAYER_EQUIPMENT_CHANGED",
 		"BAG_NEW_ITEMS_UPDATED", "BANK_TABS_CHANGED", "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED" }) do
 		pcall(events.RegisterEvent, events, event)
 	end
-	events:SetScript("OnEvent", function(_, event)
+	-- (your quest log only, not every unit's)
+	if events.RegisterUnitEvent then pcall(events.RegisterUnitEvent, events, "UNIT_QUEST_LOG_CHANGED", "player") end
+	-- The small events touch only what they change; the others draw the windows again.
+	local LIGHT = {
+		BAG_UPDATE_COOLDOWN = function(inventory) inventory.Cooldowns() end,
+		ITEM_LOCK_CHANGED = function(inventory, bag, slot) inventory.Lock(bag, slot) end,
+		PLAYER_MONEY = function(inventory) inventory.Money() end,
+	}
+	events:SetScript("OnEvent", function(_, event, ...)
 		if event == "AUCTION_HOUSE_SHOW" then
 			ns.auctionOpen = true
 			if ns.SyncAuctionator then ns.SyncAuctionator() end
 		elseif event == "AUCTION_HOUSE_CLOSED" then ns.auctionOpen = false end
-		for _, inventory in ipairs(ns.INVENTORIES) do inventory.Soon() end
+		local light = LIGHT[event]
+		for _, inventory in ipairs(ns.INVENTORIES) do
+			if light then light(inventory, ...) else inventory.Soon() end
+		end
 	end)
 end
 

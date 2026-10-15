@@ -115,7 +115,7 @@ end
 
 -- Your say changed: the windows drawn again, Auctionator told.
 local function Changed()
-	ns.SyncAuctionator()
+	if ns.auctionOpen then ns.SyncAuctionator() end
 	ns.RefreshAll()
 end
 
@@ -131,6 +131,37 @@ local function Place(id, name)
 	local db = DB()
 	db.placed[id] = name
 	if name and (db.marks[id] == "junk" or db.marks[id] == "auction") then db.marks[id] = nil end
+	Changed()
+end
+
+-- Several items at once (the bags' selection): a mark set on all of them, or taken off when all have it.
+function ns.MarkMany(ids, mark)
+	local db = DB()
+	local all = ids[1] ~= nil
+	for _, id in ipairs(ids) do
+		if db.marks[id] ~= mark then all = false end
+	end
+	for _, id in ipairs(ids) do
+		db.marks[id] = not all and mark or nil
+		if mark ~= "keep" and not all then db.placed[id] = nil end
+	end
+	Changed()
+end
+
+-- Put in one of your sections (nil: taken out).
+function ns.PlaceMany(ids, name)
+	local db = DB()
+	for _, id in ipairs(ids) do
+		db.placed[id] = name
+		if name and (db.marks[id] == "junk" or db.marks[id] == "auction") then db.marks[id] = nil end
+	end
+	Changed()
+end
+
+-- Freed: no mark, no section of yours (back where its kind puts it).
+function ns.FreeMany(ids)
+	local db = DB()
+	for _, id in ipairs(ids) do db.marks[id], db.placed[id] = nil, nil end
 	Changed()
 end
 
@@ -150,7 +181,13 @@ local function AddSection(name, id)
 	name = Trim(name)
 	if name == "" or Exists(name) then return end
 	table.insert(DB().sections, name)
-	if id then Place(id, name) else Changed() end
+	if type(id) == "table" then
+		ns.PlaceMany(id, name)
+	elseif id then
+		Place(id, name)
+	else
+		Changed()
+	end
 end
 
 local function RenameSection(old, new)
@@ -270,6 +307,20 @@ function ns.ItemMenu(owner, item)
 			root:CreateDivider()
 			root:CreateButton(L.SEARCH_AUCTION, function() WandererAuction.Search(item.name) end)
 		end
+	end)
+end
+
+-- The selection's "Section": one of yours, a new one, or out of theirs (then done(), the selection cleared).
+function ns.SectionsMenu(owner, ids, done)
+	if not (MenuUtil and MenuUtil.CreateContextMenu) then return end
+	MenuUtil.CreateContextMenu(owner, function(_, root)
+		root:CreateTitle(L.MARK_SECTION)
+		for _, name in ipairs(DB().sections) do
+			root:CreateButton(name, function() ns.PlaceMany(ids, name) done() end)
+		end
+		if DB().sections[1] then root:CreateDivider() end
+		root:CreateButton(L.SECTION_NEW, function() Popup("WANDERER_BAGS_NEW_SECTION", nil, { id = ids }) done() end)
+		root:CreateButton(L.SECTION_LEAVE, function() ns.PlaceMany(ids, nil) done() end)
 	end)
 end
 
