@@ -14,7 +14,6 @@ local W = Wanderer
 local U = W and W.Util
 local Safe, Clean = U and U.Safe, U and U.Clean
 
-local OFF_SCREEN = -10000
 local bankType -- the bank shown: the character's or the account's
 local atBank = false -- at the banker: the bank at hand, not as it was
 local gameShown = false -- the player asked for the game's window
@@ -100,25 +99,9 @@ local function Viewable(kind)
 	return Shelf(kind) ~= nil
 end
 
--- "3 hours": since the bank was seen.
-local function Ago(seen)
-	local seconds = math.max(60, time() - (seen or time()))
-	if SecondsToTime then return SecondsToTime(seconds, true, true, 1) end
-	return ("%d min"):format(math.floor(seconds / 60))
-end
-
 -- The game's bank window: in sight only when asked for.
 local function HideGameBank()
-	local frame = _G.BankFrame
-	if not frame then return end
-	if On() and not gameShown then
-		frame:SetAlpha(0)
-		frame:ClearAllPoints()
-		frame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", OFF_SCREEN, 0)
-	else
-		frame:SetAlpha(1)
-		if UpdateUIPanelPositions then pcall(UpdateUIPanelPositions, frame) end
-	end
+	U.HideOffScreen(_G.BankFrame, On() and not gameShown)
 end
 ns.RefreshBankFrame = HideGameBank
 
@@ -169,7 +152,7 @@ bank = ns.NewInventory({
 	end,
 	actions = function(window, add)
 		-- The character's or the account's.
-		window.switch = ns.TextButton(window, L.BANK_ACCOUNT, function()
+		window.switch = W.Skin.CreateLink(window, L.BANK_ACCOUNT, function()
 			local types = Types()
 			bankType = bankType == types.Account and types.Character or types.Account
 			if atBank and BankFrame and BankFrame.SetTab and BankFrame.GetTabIDForBankType then
@@ -180,17 +163,17 @@ bank = ns.NewInventory({
 		add(window.switch)
 		local container = C_Container or {}
 		if container.SortBank or container.SortBankBags then
-			window.sort = ns.TextButton(window, L.SORT, Sort, L.BANK_SORT_DESC)
+			window.sort = W.Skin.CreateLink(window, L.SORT, Sort, L.BANK_SORT_DESC)
 			add(window.sort)
 		end
 		if C_Bank and C_Bank.AutoDepositItemsIntoBank then
-			window.deposit = ns.TextButton(window, L.BANK_DEPOSIT, function()
+			window.deposit = W.Skin.CreateLink(window, L.BANK_DEPOSIT, function()
 				Safe(C_Bank.AutoDepositItemsIntoBank, bankType or Types().Character)
 			end, L.BANK_DEPOSIT_DESC)
 			add(window.deposit)
 		end
 		-- The game's window, for what only it does (buy a tab, set one).
-		window.game = ns.TextButton(window, L.BANK_GAME, function()
+		window.game = W.Skin.CreateLink(window, L.BANK_GAME, function()
 			gameShown = true
 			HideGameBank()
 		end, L.BANK_GAME_DESC)
@@ -208,7 +191,8 @@ bank = ns.NewInventory({
 		end
 		if not atBank then
 			local store = Shelf(bankType)
-			window.freeText:SetText(store and L.BANK_SEEN:format(Ago(store.time)) or "")
+			window.freeText:SetText(store and L.BANK_SEEN:format(U.Ago(time() - (store.time or time())))
+ or "")
 			return
 		end
 		ns.KeepSoon(bankType, items)

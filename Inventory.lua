@@ -27,6 +27,7 @@ ns.CUSTOM = "custom:" -- a section of yours: this, then its name
 local SELLABLE = { junk = true, others = true } -- what a merchant may take, a link away
 local LOCK_MARK = "Interface\\PetBattles\\PetBattle-LockIcon"
 local AUCTION_MARK = "Interface\\Minimap\\Tracking\\Auctioneer"
+local QUEST_MARK = "Interface\\GossipFrame\\ActiveQuestIcon"
 local AUCTION_VALUE = { auction = true, others = true } -- what the auction house would pay (Auctionator's prices)
 local TRADE = { [3] = true, [5] = true, [7] = true, [9] = true } -- gems, reagents, trade goods, recipes
 local CONSUMABLE = { [0] = true, [6] = true } -- consumables, projectiles
@@ -92,7 +93,7 @@ local function Read(bag, slot, source)
 	local id = Clean(info.itemID)
 	local link = Clean(info.hyperlink)
 	local quality = Clean(info.quality) or 1
-	local _, _, _, equip, _, class = Safe(C_Item and C_Item.GetItemInfoInstant or GetItemInfoInstant, id or 0)
+	local _, _, _, equip, _, class = U.ItemInstant(id or 0)
 	equip, class = Clean(equip), Clean(class)
 	local quest = not source and Safe(Container().GetContainerItemQuestInfo, bag, slot) or nil
 	local isQuest = type(quest) == "table" and (Clean(quest.isQuestItem) or Clean(quest.questID)) and true or false
@@ -110,7 +111,7 @@ local function Read(bag, slot, source)
 	else
 		kind = "other"
 	end
-	local name = link and link:match("%[(.-)%]") or ""
+	local name = U.LinkName(link) or ""
 	local level = kind == "gear" and link and Clean(Safe(C_Item and C_Item.GetDetailedItemLevelInfo, link)) or 0
 	return { bag = bag, slot = slot, id = id, link = link, kind = kind, quality = quality, name = name, level = level,
 		count = Clean(info.stackCount) or 1, info = info, quest = quest,
@@ -136,8 +137,6 @@ local function Matches(item, query)
 	return KindName(item.group):lower():find(query, 1, true) ~= nil
 end
 
--- A small text link, gold when hovered: Wanderer's own.
-function ns.TextButton(parent, text, onClick, tooltip) return W.Skin.CreateLink(parent, text, onClick, tooltip) end
 
 -- An inventory window ------------------------------------------------------------------------
 -- spec: name (of its frame), title, on() (in use), containers() -> { bag ids }, nameOf(bag)
@@ -154,7 +153,6 @@ function ns.NewInventory(spec)
 	local pools = { live = {}, saved = {} }
 	local buttons = pools.live
 	local NumSlots = spec.numSlots or ns.NumSlots
-	local pending = false
 	-- The selection (spec.selectable): a click chooses an item instead of using it, the bar acts on all chosen.
 	local selecting, picked, shown, lastPicked = false, {}, {}, nil
 	local selectButton, bar
@@ -173,13 +171,7 @@ function ns.NewInventory(spec)
 	-- A square of what is only seen: its tooltip and its link, nothing to move.
 	local function SavedButton()
 		local button = CreateFrame("ItemButton", nil, content)
-		button:SetScript("OnEnter", function(square)
-			if not square.wandererLink then return end
-			GameTooltip:SetOwner(square, "ANCHOR_RIGHT")
-			GameTooltip:SetHyperlink(square.wandererLink)
-			GameTooltip:Show()
-		end)
-		button:SetScript("OnLeave", function() GameTooltip:Hide() end)
+		W.Skin.ItemTooltip(button, function(square) return square.wandererLink end, "ANCHOR_RIGHT")
 		button:SetScript("OnClick", function(square)
 			if IsAltKeyDown() and square.wandererItem then
 				return ns.ItemMenu(square, square.wandererItem)
@@ -213,7 +205,9 @@ function ns.NewInventory(spec)
 			button:HookScript("OnEnter", function(square)
 				local item = square.wandererItem
 				if not (item and GameTooltip:IsOwned(square)) then return end
+				local need = ns.QuestNeed(item.id)
 				local tip = (ns.IsKept and ns.IsKept(item.id) and L.KEPT_TIP) or (ns.IsForAuction and ns.IsForAuction(item.id) and L.AUCTION_TIP)
+					or (need and L.QUEST_NEED_TIP:format(need.quest, need.have, need.need))
 				if tip then
 					GameTooltip:AddLine(tip, 0.62, 0.74, 0.86, true)
 					GameTooltip:Show()
@@ -252,28 +246,13 @@ function ns.NewInventory(spec)
 		pick.veil = pick:CreateTexture(nil, "OVERLAY")
 		pick.veil:SetAllPoints()
 		pick.veil:SetColorTexture(1, 0.82, 0, 0.22)
-		pick.edges = {}
-		for index, point in ipairs({ { "TOPLEFT", "TOPRIGHT" }, { "BOTTOMLEFT", "BOTTOMRIGHT" }, { "TOPLEFT", "BOTTOMLEFT" }, { "TOPRIGHT", "BOTTOMRIGHT" } }) do
-			local edge = pick:CreateTexture(nil, "OVERLAY", nil, 1)
-			edge:SetColorTexture(1, 0.82, 0, 0.9)
-			edge:SetPoint(point[1])
-			edge:SetPoint(point[2])
-			if index <= 2 then edge:SetHeight(1) else edge:SetWidth(1) end
-			pick.edges[index] = edge
-		end
+		pick.edges = W.Skin.Edges(pick, 1, 0.82, 0, 0.9)
 		pick.check = pick:CreateTexture(nil, "OVERLAY", nil, 2)
 		pick.check:SetSize(16, 16)
 		pick.check:SetPoint("BOTTOMRIGHT", pick, "BOTTOMRIGHT", 2, -2)
 		pick.check:SetTexture("Interface\\Buttons\\UI-CheckBox-Check")
 		pick:SetScript("OnClick", function(frame) self.TogglePick(frame:GetParent().wandererItem, IsShiftKeyDown()) end)
-		pick:SetScript("OnEnter", function(frame)
-			local square = frame:GetParent()
-			if not square.wandererLink then return end
-			GameTooltip:SetOwner(frame, "ANCHOR_RIGHT")
-			GameTooltip:SetHyperlink(square.wandererLink)
-			GameTooltip:Show()
-		end)
-		pick:SetScript("OnLeave", function() GameTooltip:Hide() end)
+		W.Skin.ItemTooltip(pick, function(frame) return frame:GetParent().wandererLink end, "ANCHOR_RIGHT")
 		button.wandererPick = pick
 		return pick
 	end
@@ -298,8 +277,10 @@ function ns.NewInventory(spec)
 		button.wandererItem = item
 		local kept = item and ns.IsKept and ns.IsKept(item.id) or false
 		local auction = item and ns.IsForAuction and ns.IsForAuction(item.id) or false
-		button.wandererLock:SetTexture(auction and AUCTION_MARK or LOCK_MARK)
-		button.wandererLock:SetShown(kept or auction)
+		-- Asked by one of your quests (an ordinary item: the game marks its own quest items).
+		local needed = not kept and not auction and item and item.kind ~= "quest" and ns.QuestNeed(item.id) and true or false
+		button.wandererLock:SetTexture(auction and AUCTION_MARK or needed and QUEST_MARK or LOCK_MARK)
+		button.wandererLock:SetShown(kept or auction or needed)
 		-- At a merchant or the auction house, a kept item takes no click nor drag (no sale by mistake): Alt+click frees it first.
 		if spec.canSell and buttons == pools.live then
 			-- For the auction house: never to a merchant.
@@ -340,10 +321,7 @@ function ns.NewInventory(spec)
 		end
 		local level = item and settings.itemLevel and item.kind == "gear" and item.level > 1 and item.level
 		button.wandererLevel:SetText(level and tostring(level) or "")
-		if level and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[item.quality] then
-			local color = ITEM_QUALITY_COLORS[item.quality]
-			button.wandererLevel:SetTextColor(color.r, color.g, color.b)
-		end
+		if level then button.wandererLevel:SetTextColor(U.QualityColor(item.quality)) end
 		-- The search: what does not match steps back.
 		local match = not item or Matches(item, query)
 		if button.SetMatchesSearch then button:SetMatchesSearch(match) else button:SetAlpha(match and 1 or 0.25) end
@@ -367,7 +345,7 @@ function ns.NewInventory(spec)
 		header:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 		header.text = W.Skin.CreateKicker(header)
 		header.text:SetPoint("LEFT", header, "LEFT", 0, 0)
-		header.sell = ns.TextButton(header, L.SELL, function() Sell(header.section) end, L.SELL_DESC)
+		header.sell = W.Skin.CreateLink(header, L.SELL, function() Sell(header.section) end, L.SELL_DESC)
 		header.sell:SetPoint("RIGHT", header, "RIGHT", 0, 0)
 		header:SetScript("OnClick", function(frame, mouse)
 			local section = frame.section
@@ -424,7 +402,6 @@ function ns.NewInventory(spec)
 	end
 
 	function self.Refresh()
-		pending = false
 		if not (window and window:IsShown()) then return end
 		local settings = ns.Settings()
 		if not settings then return end
@@ -572,10 +549,9 @@ function ns.NewInventory(spec)
 		end
 	end
 
+	local soon = U.Debounce(REFRESH_DELAY, function() self.Refresh() end)
 	function self.Soon()
-		if pending or not (window and window:IsShown()) then return end
-		pending = true
-		C_Timer.After(REFRESH_DELAY, self.Refresh)
+		if window and window:IsShown() then soon() end
 	end
 
 	-- What changes often, touched alone (no drawing again): each button shown.
@@ -745,16 +721,14 @@ function ns.NewInventory(spec)
 	local function CreateBar(margin)
 		bar = CreateFrame("Frame", nil, window)
 		bar:SetPoint("BOTTOMLEFT", window, "BOTTOMLEFT", margin, margin + BOTTOM_ROOM)
-		bar.rule = bar:CreateTexture(nil, "ARTWORK")
-		bar.rule:SetColorTexture(1, 0.82, 0, 0.2)
-		bar.rule:SetHeight(1)
+		bar.rule = W.Skin.Rule(bar, false, 0.2)
 		bar.rule:SetPoint("TOPLEFT")
 		bar.rule:SetPoint("TOPRIGHT")
 		bar.count = W.Skin.CreateText(bar, "GameTooltipTextSmall", 0.85, 0.78, 0.6)
 		bar.count:SetPoint("TOPLEFT", bar, "TOPLEFT", 0, -6)
-		bar.none = ns.TextButton(bar, L.SELECT_NONE, Clear)
+		bar.none = W.Skin.CreateLink(bar, L.SELECT_NONE, Clear)
 		bar.none:SetPoint("TOPRIGHT", bar, "TOPRIGHT", 5, -2)
-		bar.all = ns.TextButton(bar, L.SELECT_ALL, function()
+		bar.all = W.Skin.CreateLink(bar, L.SELECT_ALL, function()
 			for _, item in ipairs(shown) do picked[Key(item)] = item end
 			self.Refresh()
 		end)
@@ -762,7 +736,7 @@ function ns.NewInventory(spec)
 		bar.links = {}
 		for _, action in ipairs(ACTIONS) do
 			local link
-			link = ns.TextButton(bar, L[action.label], function()
+			link = W.Skin.CreateLink(bar, L[action.label], function()
 				local list, ids = Chosen()
 				if not list[1] then return end
 				if U.PlaySound then U.PlaySound("IG_MAINMENU_OPTION_CHECKBOX_ON") end
@@ -779,17 +753,11 @@ function ns.NewInventory(spec)
 		window = W.Skin.CreateWindow(spec.name, "MEDIUM")
 		if spec.sounds then W.Skin.Sounds(window, spec.sounds[1], spec.sounds[2]) end
 		W.Skin.Dress(window, spec.point, spec.name .. "Pos", spec.onClose)
-		window:SetClampedToScreen(true)
-		local margin = W.Skin.Margin() + 8
-		local kicker = W.Skin.CreateKicker(window, "Wanderer")
-		kicker:SetPoint("TOPLEFT", window, "TOPLEFT", margin, -margin)
-		local title = W.Skin.CreateText(window, "GameTooltipHeaderText", 1, 0.82, 0)
-		title:SetPoint("TOPLEFT", kicker, "BOTTOMLEFT", 0, -3)
-		title:SetText(spec.title)
+		local _, title, margin = W.Skin.Header(window, "Wanderer", spec.title)
 		window.titleText = title
 		-- Its links, right to left from the cross: the window's own, where it puts the choice by kind or by
 		-- container (given to it; first when it does not place it).
-		modeButton = ns.TextButton(window, L.MODE_BAGS, function()
+		modeButton = W.Skin.CreateLink(window, L.MODE_BAGS, function()
 			local settings = ns.Settings()
 			settings.layout = settings.layout == "bags" and "categories" or "bags"
 			U.PlaySound("IG_MAINMENU_OPTION_CHECKBOX_ON")
@@ -807,29 +775,26 @@ function ns.NewInventory(spec)
 		-- Choosing several items (or one) to act on them together, without Alt: a button of its own, beside
 		-- the search, where it is seen.
 		if spec.selectable then
-			selectButton = CreateFrame("Button", spec.name .. "Select", window, "UIPanelButtonTemplate")
+			selectButton = W.Skin.Button(window, L.SELECT_DONE, function() self.SetSelecting(not selecting) end)
 			-- As wide as the longer of its two words ("Select", "Done").
-			local widest = 0
-			for _, text in ipairs({ L.SELECT_DONE, L.SELECT }) do
-				selectButton:SetText(text)
-				widest = math.max(widest, U.Measure(selectButton:GetFontString() or selectButton, "GetStringWidth", 70))
-			end
-			selectButton:SetSize(widest + 28, 22)
+			local done = selectButton:GetWidth()
+			selectButton:SetText(L.SELECT)
+			selectButton:Fit()
+			selectButton:SetWidth(math.max(done, selectButton:GetWidth()))
+			selectButton:SetHeight(22)
 			selectButton:SetPoint("RIGHT", window, "RIGHT", -margin, 0)
 			selectButton:SetPoint("TOP", title, "BOTTOM", 0, -7)
-			selectButton:SetScript("OnClick", function()
-				U.PlaySound("IG_MAINMENU_OPTION_CHECKBOX_ON")
-				self.SetSelecting(not selecting)
-			end)
-			selectButton:SetScript("OnEnter", function(button)
-				GameTooltip:SetOwner(button, "ANCHOR_BOTTOM")
-				GameTooltip:AddLine(L.SELECT_DESC, 1, 1, 1, true)
-				GameTooltip:Show()
-			end)
-			selectButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
+			W.Skin.Tooltip(selectButton, L.SELECT_DESC, "ANCHOR_BOTTOM")
 		end
 		-- The search, the whole width (up to the selection's button).
-		searchBox = W.Skin.CreateInput(window, spec.name .. "Search", 40)
+		searchBox = W.Skin.CreateInput(window, spec.name .. "Search", 40, {
+			hint = L.SEARCH,
+			onChange = function() self.Search() end,
+			onEscape = function(box)
+				box:SetText("")
+				box:ClearFocus()
+			end,
+		})
 		searchBox:SetHeight(20)
 		searchBox:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 		if selectButton then
@@ -837,20 +802,6 @@ function ns.NewInventory(spec)
 		else
 			searchBox:SetPoint("RIGHT", window, "RIGHT", -margin, 0)
 		end
-		searchBox.hint = W.Skin.CreateText(searchBox, "GameTooltipTextSmall", 0.5, 0.5, 0.5)
-		searchBox.hint:SetPoint("LEFT", searchBox, "LEFT", 8, 0)
-		searchBox.hint:SetText(L.SEARCH)
-		searchBox:SetScript("OnTextChanged", function(box)
-			box.hint:SetShown((box:GetText() or "") == "" and not box:HasFocus())
-			self.Search()
-		end)
-		searchBox:SetScript("OnEditFocusGained", function(box) box.hint:Hide() end)
-		searchBox:SetScript("OnEditFocusLost", function(box) box.hint:SetShown((box:GetText() or "") == "") end)
-		searchBox:SetScript("OnEscapePressed", function(box)
-			box:SetText("")
-			box:ClearFocus()
-		end)
-		searchBox:SetScript("OnEnterPressed", function(box) box:ClearFocus() end)
 		content = CreateFrame("Frame", nil, window)
 		content:SetPoint("TOPLEFT", window, "TOPLEFT", margin, -(margin + TOP_ROOM))
 		-- At the bottom: the free slots, the gold.

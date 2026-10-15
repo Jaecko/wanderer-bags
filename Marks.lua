@@ -43,6 +43,18 @@ function ns.IsForAuction(id)
 	return ns.Mark(id) == "auction"
 end
 
+-- An item one of your quests asks you to carry (Wanderer reads the log): { quest, have, need } or nil.
+function ns.QuestNeed(id)
+	return id and W and W.QuestNeed and W.QuestNeed(id) or nil
+end
+
+-- With Wanderer Auction: its shopping list (how many you want to carry is asked there).
+local function Shop()
+	return type(WandererAuction) == "table" and WandererAuction.AskShopping and WandererAuction or nil
+end
+-- keep: always on you (the line stays, filled up at each merchant), else once.
+local function ShopAsk(item, keep) Shop().AskShopping(item.id, keep) end
+
 -- What the auction house was seen asking for an item: its price (copper) and how many days ago. Wanderer
 -- Auction's memory first, else Auctionator's.
 function ns.AuctionPrice(link)
@@ -94,21 +106,17 @@ function ns.SyncAuctionator()
 		end
 	end
 	-- Your bags: what you keep hidden, what is for the auction house first.
-	local container = C_Container or {}
-	for _, bag in ipairs(U.BagIDs()) do
-		for slot = 1, ns.NumSlots(bag) do
-			local info = U.Safe(container.GetContainerItemInfo, bag, slot)
-			local id = type(info) == "table" and U.Clean(info.itemID)
-			local link = id and U.Clean(info.hyperlink)
-			if link and ns.IsKept(id) and not hidden[db.auctionator[id] or link] then
-				pcall(groups.HideItemLink, link)
-				db.auctionator[id], hidden[link] = link, true
-			elseif link and list and ns.IsForAuction(id) and not db.auctionatorFirst[id] then
-				table.insert(list, link)
-				db.auctionatorFirst[id], changed = link, true
-			end
+	U.EachBagItem(function(_, _, info)
+		local id = U.Clean(info.itemID)
+		local link = U.Clean(info.hyperlink)
+		if link and ns.IsKept(id) and not hidden[db.auctionator[id] or link] then
+			pcall(groups.HideItemLink, link)
+			db.auctionator[id], hidden[link] = link, true
+		elseif link and list and ns.IsForAuction(id) and not db.auctionatorFirst[id] then
+			table.insert(list, link)
+			db.auctionatorFirst[id], changed = link, true
 		end
-	end
+	end)
 	local registry = groups.CallbackRegistry
 	if changed and registry and registry.TriggerEvent then pcall(registry.TriggerEvent, registry, "Customise.EditMade") end
 end
@@ -165,10 +173,6 @@ function ns.FreeMany(ids)
 	Changed()
 end
 
-local function Trim(text)
-	return (tostring(text or ""):gsub("^%s+", ""):gsub("%s+$", ""))
-end
-
 local function Exists(name)
 	for _, section in ipairs(DB().sections) do
 		if section:lower() == name:lower() then return true end
@@ -176,9 +180,8 @@ local function Exists(name)
 	return false
 end
 
--- A new section (an item put in it at once, when one was chosen).
+-- A new section (an item put in it at once, when one was chosen). The name comes trimmed from AskText.
 local function AddSection(name, id)
-	name = Trim(name)
 	if name == "" or Exists(name) then return end
 	table.insert(DB().sections, name)
 	if type(id) == "table" then
@@ -191,7 +194,6 @@ local function AddSection(name, id)
 end
 
 local function RenameSection(old, new)
-	new = Trim(new)
 	if new == "" or new == old or Exists(new) then return end
 	local db = DB()
 	for index, section in ipairs(db.sections) do
@@ -226,57 +228,15 @@ function ns.ToggleFolded(key)
 	ns.RefreshAll()
 end
 
--- The dialogs: a name to give, a section to remove.
-local function NameDialog(prompt, onAccept)
-	return {
-		text = prompt,
-		button1 = OKAY or "OK",
-		button2 = CANCEL or "Cancel",
-		hasEditBox = true,
-		maxLetters = 40,
-		OnShow = function(self, data)
-			local box = U and U.EditBoxOf(self) or self.editBox
-			if box then
-				box:SetText(type(data) == "table" and data.text or "")
-				box:HighlightText()
-				box:SetFocus()
-			end
-		end,
-		OnAccept = function(self, data)
-			local box = U and U.EditBoxOf(self) or self.editBox
-			if box then onAccept(box:GetText(), data) end
-		end,
-		EditBoxOnEnterPressed = function(box, data)
-			onAccept(box:GetText(), data)
-			box:GetParent():Hide()
-		end,
-		EditBoxOnEscapePressed = function(box) box:GetParent():Hide() end,
-		timeout = 0,
-		whileDead = true,
-		hideOnEscape = true,
-	}
+-- The questions: a name to give (a new section, a section renamed), a section to remove, the junk sold.
+local function NewSection(id)
+	W.Skin.AskText(L.SECTION_NEW_PROMPT, "", function(text) AddSection(text, id) end)
 end
-
-if StaticPopupDialogs then
-	StaticPopupDialogs.WANDERER_BAGS_NEW_SECTION = NameDialog(L.SECTION_NEW_PROMPT, function(text, data)
-		AddSection(text, type(data) == "table" and data.id)
-	end)
-	StaticPopupDialogs.WANDERER_BAGS_RENAME_SECTION = NameDialog(L.SECTION_RENAME_PROMPT, function(text, data)
-		if type(data) == "table" then RenameSection(data.text, text) end
-	end)
-	StaticPopupDialogs.WANDERER_BAGS_REMOVE_SECTION = {
-		text = L.SECTION_REMOVE_CONFIRM,
-		button1 = YES or "Yes",
-		button2 = NO or "No",
-		OnAccept = function(_, data) if data then RemoveSection(data) end end,
-		timeout = 0,
-		whileDead = true,
-		hideOnEscape = true,
-	}
+local function RenameSectionAsk(name)
+	W.Skin.AskText(L.SECTION_RENAME_PROMPT, name, function(text) RenameSection(name, text) end)
 end
-
-local function Popup(name, text, data)
-	if StaticPopup_Show then StaticPopup_Show(name, text, nil, data) end
+local function RemoveSectionAsk(name)
+	W.Skin.Ask(L.SECTION_REMOVE_CONFIRM:format(name), function() RemoveSection(name) end)
 end
 
 -- Alt+click on an item: kept, for the auction house, junk, its section (once, however the click came).
@@ -285,8 +245,7 @@ function ns.ItemMenu(owner, item)
 	local id = item and item.id
 	if not id or GetTime() - lastMenu < 0.3 then return end
 	lastMenu = GetTime()
-	if not (MenuUtil and MenuUtil.CreateContextMenu) then return W and W.Print("Wanderer Bags: menus are missing in this client.") end
-	MenuUtil.CreateContextMenu(owner, function(_, root)
+	local shown = U.Menu(owner, function(_, root)
 		root:CreateTitle(item.name ~= "" and item.name or L.TITLE)
 		root:CreateCheckbox(L.MARK_KEEP, function() return ns.Mark(id) == "keep" end, function() SetMark(id, "keep") end)
 		root:CreateCheckbox(L.MARK_AUCTION, function() return ns.Mark(id) == "auction" end, function() SetMark(id, "auction") end)
@@ -297,9 +256,19 @@ function ns.ItemMenu(owner, item)
 			sections:CreateRadio(name, function() return ns.Placed(id) == name end, function() Place(id, name) end)
 		end
 		if DB().sections[1] then sections:CreateDivider() end
-		sections:CreateButton(L.SECTION_NEW, function() Popup("WANDERER_BAGS_NEW_SECTION", nil, { id = id }) end)
+		sections:CreateButton(L.SECTION_NEW, function() NewSection(id) end)
 		if ns.Placed(id) then
 			root:CreateButton(L.SECTION_LEAVE, function() Place(id, nil) end)
+		end
+		-- With Wanderer Auction: to the shopping list (how many you want to carry), or off it.
+		local shop = Shop()
+		if shop then
+			root:CreateDivider()
+			root:CreateButton(L.SHOP_ADD, function() ShopAsk(item, false) end)
+			root:CreateButton(L.SHOP_KEEP, function() ShopAsk(item, true) end)
+			if shop.InShopping and shop.InShopping(id) and shop.RemoveFromShopping then
+				root:CreateButton(L.SHOP_REMOVE, function() shop.RemoveFromShopping(id) end)
+			end
 		end
 		-- At the auction house, with Wanderer Auction: its offers, searched at once.
 		local frame = _G.AuctionHouseFrame
@@ -308,61 +277,56 @@ function ns.ItemMenu(owner, item)
 			root:CreateButton(L.SEARCH_AUCTION, function() WandererAuction.Search(item.name) end)
 		end
 	end)
+	if not shown then W.Print("Wanderer Bags: menus are missing in this client.") end
 end
 
 -- The selection's "Section": one of yours, a new one, or out of theirs (then done(), the selection cleared).
 function ns.SectionsMenu(owner, ids, done)
-	if not (MenuUtil and MenuUtil.CreateContextMenu) then return end
-	MenuUtil.CreateContextMenu(owner, function(_, root)
+	U.Menu(owner, function(_, root)
 		root:CreateTitle(L.MARK_SECTION)
 		for _, name in ipairs(DB().sections) do
 			root:CreateButton(name, function() ns.PlaceMany(ids, name) done() end)
 		end
 		if DB().sections[1] then root:CreateDivider() end
-		root:CreateButton(L.SECTION_NEW, function() Popup("WANDERER_BAGS_NEW_SECTION", nil, { id = ids }) done() end)
+		root:CreateButton(L.SECTION_NEW, function() NewSection(ids) done() end)
 		root:CreateButton(L.SECTION_LEAVE, function() ns.PlaceMany(ids, nil) done() end)
 	end)
 end
 
 -- A right click on the title of one of your sections.
 function ns.SectionMenu(owner, name)
-	if not (MenuUtil and MenuUtil.CreateContextMenu) then return end
-	MenuUtil.CreateContextMenu(owner, function(_, root)
+	U.Menu(owner, function(_, root)
 		root:CreateTitle(name)
-		root:CreateButton(L.SECTION_RENAME, function() Popup("WANDERER_BAGS_RENAME_SECTION", nil, { text = name }) end)
-		root:CreateButton(L.SECTION_REMOVE, function() Popup("WANDERER_BAGS_REMOVE_SECTION", name, name) end)
+		root:CreateButton(L.SECTION_RENAME, function() RenameSectionAsk(name) end)
+		root:CreateButton(L.SECTION_REMOVE, function() RemoveSectionAsk(name) end)
 	end)
 end
 
 -- The game's "Sell all junk" button, while the bags are Wanderer's: the same, without what you keep.
 local function TakeSellAllJunk()
 	local button = _G.MerchantSellAllJunkButton
-	if not (button and W.SellItems and StaticPopupDialogs) then return end
-	StaticPopupDialogs.WANDERER_BAGS_SELL_JUNK = {
-		text = SELL_ALL_JUNK_ITEMS_POPUP or L.SELL,
-		button1 = YES or "Yes",
-		button2 = NO or "No",
-		OnAccept = function() W.SellItems(W.FindJunk()) end,
-		timeout = 0,
-		whileDead = true,
-		hideOnEscape = true,
-	}
+	if not (button and W.SellItems) then return end
 	local original = button:GetScript("OnClick")
 	button:SetScript("OnClick", function(...)
-		if ns.On and ns.On() then return Popup("WANDERER_BAGS_SELL_JUNK") end
+		if ns.On and ns.On() then return W.Skin.Ask(SELL_ALL_JUNK_ITEMS_POPUP or L.SELL, function() W.SellItems(W.FindJunk()) end) end
 		if original then return original(...) end
 	end)
 end
 
 function ns.InitMarks()
 	-- For Wanderer Auction: what you keep, what you set aside for the auction house.
-	WandererBagsMarks = { IsKept = ns.IsKept, IsForAuction = ns.IsForAuction, AuctionPrice = ns.AuctionPrice }
+	WandererBagsMarks = { IsKept = ns.IsKept, IsForAuction = ns.IsForAuction, AuctionPrice = ns.AuctionPrice,
+		Refresh = function() if ns.ShopRefresh then ns.ShopRefresh() end end }
+	-- Your quests' items read again when the log changes: the marks with them.
+	local quests = CreateFrame("Frame")
+	pcall(quests.RegisterEvent, quests, "QUEST_LOG_UPDATE")
+	quests:SetScript("OnEvent", U.Debounce(1, function() if ns.RefreshAll then ns.RefreshAll() end end))
 	TakeSellAllJunk()
 	-- The game's own modified click on an item also says it: Alt over one of our squares opens the menu.
 	if hooksecurefunc and HandleModifiedItemClick then
 		hooksecurefunc("HandleModifiedItemClick", function()
 			if not IsAltKeyDown() then return end
-			local focus = GetMouseFoci and GetMouseFoci()[1]
+			local focus = U.MouseFocus()
 			if type(focus) == "table" and focus.wandererItem then ns.ItemMenu(focus, focus.wandererItem) end
 		end)
 	end

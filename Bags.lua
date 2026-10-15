@@ -30,19 +30,47 @@ local bags = ns.NewInventory({
 	-- Read left to right: the bank, the sorting, how they are shown, the help (beside the cross).
 	actions = function(window, add, mode)
 		-- What can be done here, said once.
-		local help = ns.TextButton(window, "?", nil, L.HELP_TIP)
+		local help = W.Skin.CreateLink(window, "?", nil, L.HELP_TIP)
 		add(help)
 		add(mode)
 		if C_Container and C_Container.SortBags then
-			add(ns.TextButton(window, L.SORT, function() Safe(C_Container.SortBags) end, L.SORT_DESC))
+			add(W.Skin.CreateLink(window, L.SORT, function() Safe(C_Container.SortBags) end, L.SORT_DESC))
 		end
 		-- Away from the banker: the bank as you left it.
-		window.bank = ns.TextButton(window, L.BANK_TITLE, function() ns.ToggleSavedBank() end, L.BANK_SEEN_DESC)
+		window.bank = W.Skin.CreateLink(window, L.BANK_TITLE, function() ns.ToggleSavedBank() end, L.BANK_SEEN_DESC)
 		add(window.bank)
+		-- With Wanderer Auction: the shopping list, and how many items it still lacks.
+		window.shop = W.Skin.CreateLink(window, L.SHOP_LINK, function()
+			if type(WandererAuction) == "table" and WandererAuction.ToggleList then WandererAuction.ToggleList() end
+		end, L.SHOP_LINK_DESC)
+		add(window.shop)
 	end,
-	onRefresh = function(window) window.bank:SetShown(ns.HasSavedBank()) end,
+	onRefresh = function(window)
+		window.bank:SetShown(ns.HasSavedBank())
+		ns.ShopLink(window)
+	end,
 })
 ns.Bags = bags
+
+-- The shopping list's link: shown with Wanderer Auction, its count of items still missing.
+local shopWindow
+function ns.ShopLink(window)
+	shopWindow = window or shopWindow
+	local link = shopWindow and shopWindow.shop
+	if not link then return end
+	local api = type(WandererAuction) == "table" and WandererAuction.ToggleList and WandererAuction or nil
+	link:SetShown(api ~= nil)
+	if not api then return end
+	local lack = api.ShoppingLack and api.ShoppingLack() or 0
+	link:SetLabel(lack > 0 and L.SHOP_LINK_COUNT:format(lack) or L.SHOP_LINK)
+end
+
+-- The list changed (Wanderer Auction says it): the link alone, the heading's links placed again.
+function ns.ShopRefresh()
+	if not (shopWindow and shopWindow:IsShown()) then return end
+	ns.ShopLink()
+	bags.ChainLinks()
+end
 
 -- Where an item may be sold (a merchant, the auction house): kept items are guarded there.
 function ns.Guarding()
@@ -87,7 +115,7 @@ end
 function ns.Init()
 	if not (W and W.RegisterExtension) then return end
 	-- An older Wanderer: said once, nothing taken.
-	if (W.API or 1) < 2 then return W.Print(L.NEEDS_WANDERER) end
+	if (W.API or 1) < 4 then return W.Print(L.NEEDS_WANDERER) end
 	W.RegisterExtension({
 		key = "bags",
 		title = L.TITLE,
@@ -147,10 +175,5 @@ function ns.Init()
 	end)
 end
 
-local loader = CreateFrame("Frame")
-loader:RegisterEvent("ADDON_LOADED")
-loader:SetScript("OnEvent", function(self, _, name)
-	if name ~= ADDON then return end
-	self:UnregisterEvent("ADDON_LOADED")
-	ns.Init()
-end)
+-- (an older Wanderer, without it: said once)
+if W and W.WhenLoaded then W.WhenLoaded(ADDON, ns.Init) elseif W and W.Print then W.Print(L.NEEDS_WANDERER) end
