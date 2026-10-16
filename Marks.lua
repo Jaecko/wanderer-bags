@@ -376,8 +376,9 @@ function ns.InitMarks()
 	-- Wanderer's sale of the junk at merchants follows these marks.
 	if not (W and W.AddJunkRule) then return end
 	W.AddJunkRule(function(id)
-		if not (ns.On and ns.On()) then return nil end
+		-- (kept or for the auction house: never sold, whatever the bags' window; junk: while it is on)
 		if ns.IsKept(id) or ns.IsForAuction(id) then return false end
+		if not (ns.On and ns.On()) then return nil end
 		if ns.Mark(id) == "junk" then return true end
 		return nil
 	end)
