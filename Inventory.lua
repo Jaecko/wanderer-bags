@@ -14,6 +14,12 @@ local U = W and W.Util
 local Safe, Clean = U and U.Safe, U and U.Clean
 local Upper = U and U.Upper or string.upper -- capitals in every language (an older Wanderer: the game's own)
 
+-- An action of a window: a real button of Wanderer's kit (an older Wanderer: its link).
+function ns.Action(parent, text, onClick, tooltip, height)
+	if W.Skin.SmallButton then return W.Skin.SmallButton(parent, text, onClick, tooltip, height) end
+	return W.Skin.CreateLink(parent, text, onClick, tooltip)
+end
+
 local GAP = 4
 local SECTION_GAP = 10
 local HEADER_HEIGHT = 14
@@ -21,6 +27,7 @@ local TOP_ROOM = 64 -- heading, search
 local BOTTOM_ROOM = 26 -- free slots, gold
 local REFRESH_DELAY = 0.05 -- many updates at once: one drawing
 
+local SHARED_KINDS = { quest = "QUESTS", gear = "GEAR", auction = "FOR_AUCTION" }
 local CATEGORY_ORDER = { "new", "custom", "gear", "consumable", "professions", "alts", "trade", "quest", "other", "auction", "others", "junk", "kept" }
 local PROFESSION = "profession:" -- a section of one of your professions: this, then its name
 ns.CUSTOM = "custom:" -- a section of yours: this, then its name
@@ -46,7 +53,8 @@ ns.INVENTORIES = {}
 local function KindName(kind)
 	if kind:find(PROFESSION, 1, true) == 1 then return kind:sub(#PROFESSION + 1) end
 	if kind:find(ns.CUSTOM, 1, true) == 1 then return kind:sub(#ns.CUSTOM + 1) end
-	return L["CAT_" .. kind:upper()]
+	-- (three of them are words every addon shares)
+	return L[SHARED_KINDS[kind] or ("CAT_" .. kind:upper())]
 end
 
 -- A crafting reagent's section, from what Wanderer knows of the professions using it: the one of yours with the most
@@ -345,7 +353,7 @@ function ns.NewInventory(spec)
 		header:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 		header.text = W.Skin.CreateKicker(header)
 		header.text:SetPoint("LEFT", header, "LEFT", 0, 0)
-		header.sell = W.Skin.CreateLink(header, L.SELL, function() Sell(header.section) end, L.SELL_DESC)
+		header.sell = ns.Action(header, L.SELL, function() Sell(header.section) end, L.SELL_DESC, 16)
 		header.sell:SetPoint("RIGHT", header, "RIGHT", 0, 0)
 		header:SetScript("OnClick", function(frame, mouse)
 			local section = frame.section
@@ -542,7 +550,7 @@ function ns.NewInventory(spec)
 				if previous then
 					link:SetPoint("RIGHT", previous, "LEFT", -6, 0)
 				else
-					link:SetPoint("TOPRIGHT", window, "TOPRIGHT", -(W.Skin.Margin() + 30), -(W.Skin.Margin() + 8))
+					link:SetPoint("TOPRIGHT", window, "TOPRIGHT", -(W.Skin.Margin() + 30), -(W.Skin.Margin() + 6))
 				end
 				previous = link
 			end
@@ -696,7 +704,7 @@ function ns.NewInventory(spec)
 		local count = 0
 		for _ in pairs(picked) do count = count + 1 end
 		bar.count:SetText(count > 0 and L.PICKED:format(count) or L.PICK_HINT)
-		local x, y, line, group = 0, 22, 18, nil
+		local x, y, line, group = 0, 24, 26, nil
 		for _, action in ipairs(ACTIONS) do
 			local link = bar.links[action.key]
 			local show = not action.when or action.when(count) or false
@@ -708,7 +716,7 @@ function ns.NewInventory(spec)
 				if x > 0 and (x + w > width or action.group ~= group) then x, y = 0, y + line end
 				group = action.group
 				link:ClearAllPoints()
-				link:SetPoint("TOPLEFT", bar, "TOPLEFT", x - 5, -y)
+				link:SetPoint("TOPLEFT", bar, "TOPLEFT", x, -y)
 				x = x + w + 4
 			end
 		end
@@ -726,9 +734,9 @@ function ns.NewInventory(spec)
 		bar.rule:SetPoint("TOPRIGHT")
 		bar.count = W.Skin.CreateText(bar, "GameTooltipTextSmall", 0.85, 0.78, 0.6)
 		bar.count:SetPoint("TOPLEFT", bar, "TOPLEFT", 0, -6)
-		bar.none = W.Skin.CreateLink(bar, L.SELECT_NONE, Clear)
-		bar.none:SetPoint("TOPRIGHT", bar, "TOPRIGHT", 5, -2)
-		bar.all = W.Skin.CreateLink(bar, L.SELECT_ALL, function()
+		bar.none = ns.Action(bar, L.SELECT_NONE, Clear)
+		bar.none:SetPoint("TOPRIGHT", bar, "TOPRIGHT", 0, -2)
+		bar.all = ns.Action(bar, L.SELECT_ALL, function()
 			for _, item in ipairs(shown) do picked[Key(item)] = item end
 			self.Refresh()
 		end)
@@ -736,7 +744,7 @@ function ns.NewInventory(spec)
 		bar.links = {}
 		for _, action in ipairs(ACTIONS) do
 			local link
-			link = W.Skin.CreateLink(bar, L[action.label], function()
+			link = ns.Action(bar, L[action.label], function()
 				local list, ids = Chosen()
 				if not list[1] then return end
 				if U.PlaySound then U.PlaySound("IG_MAINMENU_OPTION_CHECKBOX_ON") end
@@ -757,7 +765,7 @@ function ns.NewInventory(spec)
 		window.titleText = title
 		-- Its links, right to left from the cross: the window's own, where it puts the choice by kind or by
 		-- container (given to it; first when it does not place it).
-		modeButton = W.Skin.CreateLink(window, L.MODE_BAGS, function()
+		modeButton = ns.Action(window, L.MODE_BAGS, function()
 			local settings = ns.Settings()
 			settings.layout = settings.layout == "bags" and "categories" or "bags"
 			U.PlaySound("IG_MAINMENU_OPTION_CHECKBOX_ON")
@@ -814,6 +822,7 @@ function ns.NewInventory(spec)
 		window:HookScript("OnShow", function(frame)
 			frame:SetScale(W.Skin.Scale())
 			self.Refresh()
+			if spec.onShow then spec.onShow() end
 		end)
 		window:HookScript("OnHide", function()
 			-- Closed: the selection ends.

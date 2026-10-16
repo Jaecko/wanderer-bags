@@ -152,7 +152,7 @@ bank = ns.NewInventory({
 	end,
 	actions = function(window, add)
 		-- The character's or the account's.
-		window.switch = W.Skin.CreateLink(window, L.BANK_ACCOUNT, function()
+		window.switch = ns.Action(window, L.BANK_ACCOUNT, function()
 			local types = Types()
 			bankType = bankType == types.Account and types.Character or types.Account
 			if atBank and BankFrame and BankFrame.SetTab and BankFrame.GetTabIDForBankType then
@@ -163,17 +163,17 @@ bank = ns.NewInventory({
 		add(window.switch)
 		local container = C_Container or {}
 		if container.SortBank or container.SortBankBags then
-			window.sort = W.Skin.CreateLink(window, L.SORT, Sort, L.BANK_SORT_DESC)
+			window.sort = ns.Action(window, L.SORT, Sort, L.BANK_SORT_DESC)
 			add(window.sort)
 		end
 		if C_Bank and C_Bank.AutoDepositItemsIntoBank then
-			window.deposit = W.Skin.CreateLink(window, L.BANK_DEPOSIT, function()
+			window.deposit = ns.Action(window, L.BANK_DEPOSIT, function()
 				Safe(C_Bank.AutoDepositItemsIntoBank, bankType or Types().Character)
 			end, L.BANK_DEPOSIT_DESC)
 			add(window.deposit)
 		end
 		-- The game's window, for what only it does (buy a tab, set one).
-		window.game = W.Skin.CreateLink(window, L.BANK_GAME, function()
+		window.game = ns.Action(window, L.BANK_GAME, function()
 			gameShown = true
 			HideGameBank()
 		end, L.BANK_GAME_DESC)

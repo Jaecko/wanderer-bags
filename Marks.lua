@@ -1,7 +1,7 @@
 local _, ns = ...
 local L = ns.L
 
--- Your own say over your items, for the whole account: kept (never offered
+-- Your own say over your items, for each character (each one its own): kept (never offered
 -- for sale), for the auction house (never sold to a merchant, first in
 -- Auctionator's selling list), junk (sold with the junk, whatever its color),
 -- or put in a section of yours (kept too). Alt+click on an item opens the choices, a
@@ -10,9 +10,31 @@ local L = ns.L
 local W = Wanderer
 local U = W and W.Util
 
+-- (each table copied, for a character's own start)
+local function Copy(list)
+	local copy = {}
+	for key, value in pairs(type(list) == "table" and list or {}) do copy[key] = value end
+	return copy
+end
+
+-- This character's choices. Its first time: the choices made before they were each character's (once
+-- shared by the whole account) as its start, then its own.
 local function DB()
 	WandererBagsDB = WandererBagsDB or {}
-	local db = WandererBagsDB
+	local root = WandererBagsDB
+	root.choices = type(root.choices) == "table" and root.choices or {}
+	local who = U and U.Clean(U.Safe(UnitGUID, "player"))
+	local db = who and root.choices[who]
+	if not db then
+		-- (the old shared choices, a month long after the first character took them)
+		local now = time()
+		root.sharedUntil = root.sharedUntil or now + 30 * 86400
+		local seed = now <= root.sharedUntil and root or {}
+		db = { marks = Copy(seed.marks), sections = Copy(seed.sections), placed = Copy(seed.placed), folded = Copy(seed.folded),
+			auctionator = Copy(seed.auctionator), auctionatorFirst = Copy(seed.auctionatorFirst) }
+		-- (the character not known yet, at the very start: a passing copy, nothing kept)
+		if who then root.choices[who] = db end
+	end
 	db.marks = db.marks or {} -- item id -> "keep", "auction" or "junk"
 	db.sections = db.sections or {} -- your sections' names, in their order
 	db.placed = db.placed or {} -- item id -> the name of its section
@@ -302,15 +324,32 @@ function ns.SectionMenu(owner, name)
 	end)
 end
 
--- The game's "Sell all junk" button, while the bags are Wanderer's: the same, without what you keep.
-local function TakeSellAllJunk()
+-- The game's "Sell all junk" button, while the bags are Wanderer's: left untouched, a button of ours lies over
+-- it and does the same without what you keep (hovered, the game's own highlight and tooltip).
+local function CoverSellAllJunk()
 	local button = _G.MerchantSellAllJunkButton
 	if not (button and W.SellItems) then return end
-	local original = button:GetScript("OnClick")
-	button:SetScript("OnClick", function(...)
-		if ns.On and ns.On() then return W.Skin.Ask(SELL_ALL_JUNK_ITEMS_POPUP or L.SELL, function() W.SellItems(W.FindJunk()) end) end
-		if original then return original(...) end
+	local cover = CreateFrame("Button", nil, button)
+	cover:SetAllPoints()
+	cover:SetFrameLevel(button:GetFrameLevel() + 2)
+	cover:SetScript("OnClick", function()
+		if button.IsEnabled and not button:IsEnabled() then return end
+		W.Skin.Ask(SELL_ALL_JUNK_ITEMS_POPUP or L.SELL, function() W.SellItems(W.FindJunk()) end)
 	end)
+	cover:SetScript("OnEnter", function()
+		if button.LockHighlight then button:LockHighlight() end
+		local enter = button:GetScript("OnEnter")
+		if enter then enter(button) end
+	end)
+	cover:SetScript("OnLeave", function()
+		if button.UnlockHighlight then button:UnlockHighlight() end
+		local leave = button:GetScript("OnLeave")
+		if leave then leave(button) end
+	end)
+	-- (only while the bags are Wanderer's)
+	local function Shown() cover:SetShown(ns.On and ns.On() or false) end
+	button:HookScript("OnShow", Shown)
+	Shown()
 end
 
 function ns.InitMarks()
@@ -320,8 +359,12 @@ function ns.InitMarks()
 	-- Your quests' items read again when the log changes: the marks with them.
 	local quests = CreateFrame("Frame")
 	pcall(quests.RegisterEvent, quests, "QUEST_LOG_UPDATE")
-	quests:SetScript("OnEvent", U.Debounce(1, function() if ns.RefreshAll then ns.RefreshAll() end end))
-	TakeSellAllJunk()
+	quests:SetScript("OnEvent", U.Debounce(1, function()
+		for _, inventory in ipairs(ns.INVENTORIES or {}) do
+			if inventory.IsShown and inventory.IsShown() then return ns.RefreshAll() end
+		end
+	end))
+	CoverSellAllJunk()
 	-- The game's own modified click on an item also says it: Alt over one of our squares opens the menu.
 	if hooksecurefunc and HandleModifiedItemClick then
 		hooksecurefunc("HandleModifiedItemClick", function()

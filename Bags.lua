@@ -3,7 +3,10 @@ local L = ns.L
 
 -- Your bags in Wanderer's window, in place of the game's: its keys, its bag
 -- buttons, the merchant or the mailbox open this window while it is on.
--- Wanderer turned off, or this option: the game's bags, as they were.
+-- Nothing of the game's is replaced: it opens and closes its own bags as
+-- always, this window follows them, and the game's frames for your bags are
+-- kept out of sight. Wanderer turned off, or this option: the game's bags,
+-- as they were.
 
 local W = Wanderer
 local U = W and W.Util
@@ -34,13 +37,13 @@ local bags = ns.NewInventory({
 		add(help)
 		add(mode)
 		if C_Container and C_Container.SortBags then
-			add(W.Skin.CreateLink(window, L.SORT, function() Safe(C_Container.SortBags) end, L.SORT_DESC))
+			add(ns.Action(window, L.SORT, function() Safe(C_Container.SortBags) end, L.SORT_DESC))
 		end
 		-- Away from the banker: the bank as you left it.
-		window.bank = W.Skin.CreateLink(window, L.BANK_TITLE, function() ns.ToggleSavedBank() end, L.BANK_SEEN_DESC)
+		window.bank = ns.Action(window, L.BANK_TITLE, function() ns.ToggleSavedBank() end, L.BANK_SEEN_DESC)
 		add(window.bank)
 		-- With Wanderer Auction: the shopping list, and how many items it still lacks.
-		window.shop = W.Skin.CreateLink(window, L.SHOP_LINK, function()
+		window.shop = ns.Action(window, L.SHOP_LINK, function()
 			if type(WandererAuction) == "table" and WandererAuction.ToggleList then WandererAuction.ToggleList() end
 		end, L.SHOP_LINK_DESC)
 		add(window.shop)
@@ -49,6 +52,9 @@ local bags = ns.NewInventory({
 		window.bank:SetShown(ns.HasSavedBank())
 		ns.ShopLink(window)
 	end,
+	-- Opened or closed by itself (a link, its cross, Escape): the game's bags with it.
+	onShow = function() if ns.GameBagsFollow then ns.GameBagsFollow(true) end end,
+	onHide = function() if ns.GameBagsFollow then ns.GameBagsFollow(false) end end,
 })
 ns.Bags = bags
 
@@ -79,8 +85,6 @@ end
 
 -- The game's bags: Wanderer's window in their place --------------------------------------------
 
-local original = {}
-
 local function IsBag(id)
 	id = tonumber(id)
 	if not id then return false end
@@ -88,26 +92,74 @@ local function IsBag(id)
 	return false
 end
 
--- A game function answered by the window while it is on (for one bag: only ours).
-local function Take(name, replacement, oneBag)
-	original[name] = _G[name]
-	_G[name] = function(id, ...)
-		if On() and (not oneBag or IsBag(id)) then return replacement() end
-		if original[name] then return original[name](id, ...) end
+-- The game's frames for your bags (all of them together, or one by one): kept under this hidden frame while
+-- the window is on, back under their own parent when it is off. Another container stays the game's.
+local hidden = CreateFrame("Frame")
+hidden:Hide()
+local parents = {} -- the game's frame -> its own parent
+local function Tuck(frame)
+	if type(frame) ~= "table" or not frame.SetParent then return end
+	local mine = On() and (frame == _G.ContainerFrameCombinedBags or IsBag(frame.GetID and frame:GetID()))
+	if mine and frame:GetParent() ~= hidden then
+		parents[frame] = frame:GetParent()
+		frame:SetParent(hidden)
+	elseif not mine and parents[frame] then
+		frame:SetParent(parents[frame])
+		parents[frame] = nil
 	end
 end
 
-local function TakeBags()
-	Take("ToggleAllBags", bags.Toggle)
-	Take("OpenAllBags", bags.Open)
-	Take("CloseAllBags", bags.Close)
-	Take("ToggleBackpack", bags.Toggle)
-	Take("OpenBackpack", bags.Open)
-	Take("CloseBackpack", bags.Close)
-	-- One bag asked: the window (another container stays the game's).
-	Take("ToggleBag", bags.Toggle, true)
-	Take("OpenBag", bags.Open, true)
-	Take("CloseBag", bags.Close, true)
+local function GameFrames()
+	local frames = { _G.ContainerFrameCombinedBags }
+	for index = 1, NUM_CONTAINER_FRAMES or 13 do frames[#frames + 1] = _G["ContainerFrame" .. index] end
+	return frames
+end
+
+-- The game says one of your bags is open (all together, or one of them).
+local function GameOpen()
+	local combined = _G.ContainerFrameCombinedBags
+	if combined and combined:IsShown() then return true end
+	for _, bag in ipairs(Bags()) do
+		if IsBagOpen and IsBagOpen(bag) then return true end
+	end
+	return false
+end
+
+-- The window follows the game's bags; the game's follow the window (while one moves the other, nothing
+-- answers back).
+local following = false
+local function FollowGame()
+	if following or not On() then return end
+	following = true
+	if GameOpen() then bags.Open() else bags.Close() end
+	following = false
+end
+
+function ns.GameBagsFollow(shown)
+	if following or not On() or GameOpen() == shown then return end
+	following = true
+	if shown then
+		if OpenAllBags then OpenAllBags() end
+	elseif CloseAllBags then
+		CloseAllBags()
+	end
+	following = false
+end
+
+local function FollowBags()
+	for _, name in ipairs({ "ToggleAllBags", "OpenAllBags", "CloseAllBags", "ToggleBackpack", "OpenBackpack", "CloseBackpack",
+		"ToggleBag", "OpenBag", "CloseBag" }) do
+		if type(_G[name]) == "function" then hooksecurefunc(name, FollowGame) end
+	end
+	for _, frame in pairs(GameFrames()) do
+		Tuck(frame)
+		frame:HookScript("OnShow", Tuck)
+	end
+end
+
+-- The option turned on or off: the game's frames tucked away or given back.
+function ns.TuckGameBags()
+	for _, frame in pairs(GameFrames()) do Tuck(frame) end
 end
 
 -- Init ---------------------------------------------------------------------------------------
@@ -115,14 +167,21 @@ end
 function ns.Init()
 	if not (W and W.RegisterExtension) then return end
 	-- An older Wanderer: said once, nothing taken.
-	if (W.API or 1) < 4 then return W.Print(L.NEEDS_WANDERER) end
+	if (W.API or 1) < 6 then return W.Print(L.NEEDS_WANDERER) end
+	-- (a weight, what you play, your talents changed: the green arrows judged again at once)
+	if W.OnComparisonChanged then W.OnComparisonChanged(function() if ns.RefreshAll then ns.RefreshAll() end end) end
 	W.RegisterExtension({
 		key = "bags",
+		addon = ADDON,
 		title = L.TITLE,
+		news = L.NEWS_LINES,
 		defaults = { enabled = true, bank = true, layout = "categories", byProfession = true, columns = 10, iconSize = 36, itemLevel = true,
 			upgrade = true, junk = true },
 		ranges = { ["bags.columns"] = { 6, 16, 1 }, ["bags.iconSize"] = { 28, 44, 2 } },
-		refresh = ns.RefreshAll,
+		refresh = function()
+			ns.TuckGameBags()
+			ns.RefreshAll()
+		end,
 		options = function(o)
 			o.Header(L.TITLE)
 			local enabled = o.Checkbox("bags", "enabled", L.ENABLE, L.ENABLE_DESC, ns.RefreshAll)
@@ -140,13 +199,13 @@ function ns.Init()
 			Check("itemLevel", L.ITEM_LEVEL, L.ITEM_LEVEL_DESC)
 			Check("upgrade", L.UPGRADE, L.UPGRADE_DESC)
 			Check("junk", L.JUNK, L.JUNK_DESC)
-			Sub(o.Button(L.OPEN, L.OPEN_BUTTON, nil, function()
+			Sub(o.Button(L.OPEN_LABEL, L.OPEN, nil, function()
 				o.CloseSettings()
-				bags.Open()
+				if OpenAllBags then OpenAllBags() else bags.Open() end
 			end))
 		end,
 	})
-	TakeBags()
+	FollowBags()
 	if ns.InitMarks then ns.InitMarks() end
 	if ns.InitBank then ns.InitBank() end
 	local events = CreateFrame("Frame")

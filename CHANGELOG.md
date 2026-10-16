@@ -1,10 +1,7 @@
-# Wanderer Bags 0.4.0
-
-### New
-- Items your quests ask you to carry are marked in your bags (a quest sign, the quest and your progress in their tooltip), and never offered for sale at the auction house.
-- With Wanderer Auction, Alt+click on an item: "Shopping list..." (to buy once) or "Always on you..." (a count kept at all times, filled up at each merchant).
-- With Wanderer Auction, a "Shopping" link in the bags' heading opens your shopping list, with how many items are still missing.
+# Wanderer Bags 0.5.0
 
 ### Changed
-- Its questions, inputs and buttons are Wanderer's own: the same look as every other window.
-- Needs Wanderer 0.42 or later.
+- Your marks (kept, auction house, junk) and your sections are now each character's own; each starts from the ones you had.
+- The green arrows follow a change of weights or of what you play at once.
+- Every action is a real button: sort, bank, shopping list, sell, the selection's bar.
+- Needs Wanderer 0.43 or later.
