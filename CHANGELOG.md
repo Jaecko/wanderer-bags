@@ -1,4 +1,4 @@
-# Wanderer Bags 0.5.1
+# Wanderer Bags 0.5.2
 
-### Fixed
-- What you keep or mark for the auction house is never sold with the junk, whether the bags' window is on or not.
+### Changed
+- Wanderer Auction can send to the junk an item set aside for the auction house that brings more at a merchant (its option, with Wanderer Auction 0.5).

@@ -355,7 +355,13 @@ end
 function ns.InitMarks()
 	-- For Wanderer Auction: what you keep, what you set aside for the auction house.
 	WandererBagsMarks = { IsKept = ns.IsKept, IsForAuction = ns.IsForAuction, AuctionPrice = ns.AuctionPrice,
-		Refresh = function() if ns.ShopRefresh then ns.ShopRefresh() end end }
+		Refresh = function() if ns.ShopRefresh then ns.ShopRefresh() end end,
+		-- (an item set aside for the auction house that brings more at a merchant: junk now, sold at the next one)
+		ToJunk = function(id)
+			if not (id and ns.IsForAuction(id)) then return false end
+			SetMark(id, "junk")
+			return true
+		end }
 	-- Your quests' items read again when the log changes: the marks with them.
 	local quests = CreateFrame("Frame")
 	pcall(quests.RegisterEvent, quests, "QUEST_LOG_UPDATE")

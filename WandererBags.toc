@@ -12,7 +12,7 @@
 ## Notes-zhCN: 把背包放进一个 Wanderer 窗口：按类别或逐个背包排列，可搜索，显示物品等级，并以 Wanderer 的绿色箭头标出更适合你的装备。
 ## Notes-zhTW: 把背包放進一個 Wanderer 視窗：依類別或逐個背包排列，可搜尋，顯示物品等級，並以 Wanderer 的綠色箭頭標出更適合你的裝備。
 ## Category: Inventory
-## Version: 0.5.1
+## Version: 0.5.2
 ## X-Curse-Project-ID: 1736973
 ## X-Wago-ID: rN4rYwKD
 ## Author: Jaekco
