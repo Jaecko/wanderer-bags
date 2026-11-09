@@ -376,6 +376,7 @@ function ns.AskWithBox(words, label, accept)
 	local frame = boxAsk
 	if not frame then
 		frame = W.Skin.CreateWindow("WandererBagsAsk", "DIALOG")
+		if W.Skin.PadWindow then W.Skin.PadWindow(frame) end
 		frame:SetPoint("CENTER", UIParent, "CENTER", 0, 120)
 		frame:EnableMouse(true)
 		frame.words = W.Skin.Text(frame, "GameTooltipText", "text")
@@ -564,7 +565,7 @@ function ns.NewInventory(spec)
 		local pick = CreateFrame("Button", nil, button)
 		pick:SetAllPoints()
 		pick:SetFrameLevel(button:GetFrameLevel() + 10)
-		pick:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+		pick:RegisterForClicks("LeftButtonUp", "RightButtonUp") pick.padRight = true
 		pick.veil = pick:CreateTexture(nil, "OVERLAY")
 		pick.veil:SetAllPoints()
 		pick.veil:SetColorTexture(1, 0.82, 0, 0.22)
@@ -788,7 +789,7 @@ function ns.NewInventory(spec)
 		if header then return header end
 		header = CreateFrame("Button", nil, content)
 		header:SetHeight(HEADER_HEIGHT)
-		header:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+		header:RegisterForClicks("LeftButtonUp", "RightButtonUp") header.padRight = true
 		header.ground = header:CreateTexture(nil, "BACKGROUND")
 		header.ground:SetAllPoints()
 		header.ground:SetColorTexture(1, 1, 1, 0)

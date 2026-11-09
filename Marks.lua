@@ -768,6 +768,8 @@ function ns.InitMarks()
 	WandererBags.OutfitsChanged = function() ns.OutfitsChanged() end
 	-- (Wanderer Auction's banker waits while the bags move items one by one)
 	WandererBags.Moving = function() return ns.Moving and ns.Moving() or false end
+	-- (Wanderer Professions: your other characters holding an item)
+	WandererBags.Carriers = function(id) return ns.Carriers and ns.Carriers(id) or {} end
 	WandererBags.AtBank = function() return ns.AtBank and ns.AtBank() or false end
 	WandererBags.TakeFromBank = function(wants) return ns.TakeFromBank and ns.TakeFromBank(wants) or false end
 	CoverSellAllJunk()
