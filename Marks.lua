@@ -254,9 +254,9 @@ function ns.FreeMany(ids)
 	Changed()
 end
 
-local function Exists(name)
+local function Exists(name, except)
 	for _, section in ipairs(DB().sections) do
-		if section:lower() == name:lower() then return true end
+		if section ~= except and section:lower() == name:lower() then return true end
 	end
 	return false
 end
@@ -279,7 +279,8 @@ ns.BANK_FOLD = "bank:"
 local FOLD_PREFIXES = { "", ns.BANK_FOLD }
 
 local function RenameSection(old, new)
-	if new == "" or new == old or Exists(new) then return end
+	-- (its own name in other capitals: allowed)
+	if new == "" or new == old or Exists(new, old) then return end
 	local db = DB()
 	for index, section in ipairs(db.sections) do
 		if section == old then db.sections[index] = new end
@@ -503,7 +504,6 @@ local TILES = {
 	{ mark = "bank", label = "MARK_TILE_BANK", tip = "MARK_BANK_TIP" },
 	{ mark = false, label = "MARK_TILE_NONE", tip = "MARK_NONE_TIP" },
 }
-ns.MARK_TILES = TILES
 -- (the game's junk coin, as on the squares; an older game: its loot roll's coin)
 local JUNK_ATLAS, JUNK_FILE = "bags-junkcoin", "Interface\\Buttons\\UI-GroupLoot-Coin-Up"
 

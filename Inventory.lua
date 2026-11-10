@@ -476,6 +476,34 @@ function ns.NewInventory(spec)
 		return button
 	end
 
+	-- Kept, an outfit's piece, a quest's: said in the item's tooltip, with how to free it.
+	local function AddWords(square)
+		local item = square.wandererItem
+		if not item then return end
+		local need = ns.QuestNeed(item.id)
+		local outfit = ns.InOutfit(item.id)
+		local lines = {}
+		local mark, value = MarkOf(item.id)
+		lines[#lines + 1] = MarkWords(mark, value, "tip")
+		-- (an outfit's piece: said whatever its mark, it is never sold)
+		if outfit then lines[#lines + 1] = L.OUTFIT_TIP:format(table.concat(outfit, ", ")) end
+		if not lines[1] and need then lines[1] = L.QUEST_NEED_TIP:format(need.quest, need.have, need.need) end
+		local blue = W.Skin.COLORS.blue
+		for _, line in ipairs(lines) do GameTooltip:AddLine(line, blue[1], blue[2], blue[3], true) end
+		-- (shown again only without the game's coins in it: an addon-asked showing breaks their widths)
+		if lines[1] then W.Util.ShowTooltipAgain(GameTooltip) end
+	end
+
+	local wordsFollow = false
+	if TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall and Enum.TooltipDataType then
+		wordsFollow = true
+		TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, function(tooltip)
+			if tooltip ~= GameTooltip then return end
+			local owner = tooltip.GetOwner and tooltip:GetOwner()
+			if type(owner) == "table" and owner.wandererOurWords == spec.name and owner.wandererItem then AddWords(owner) end
+		end)
+	end
+
 	local function Button(bag, slot)
 		buttons[bag] = buttons[bag] or {}
 		local button = buttons[bag][slot]
@@ -511,20 +539,16 @@ function ns.NewInventory(spec)
 					Safe(GameTooltip.SetInventoryItem, GameTooltip, "player", _G.BankButtonIDToInvSlotID(item.slot))
 				end
 				if not (item and GameTooltip:IsOwned(square)) then return end
-				local need = ns.QuestNeed(item.id)
-				local outfit = ns.InOutfit(item.id)
-				local lines = {}
-				lines[#lines + 1] = MarkWords(MarkOf(item.id), nil, "tip")
-				-- (an outfit's piece: said whatever its mark, it is never sold)
-				if outfit then lines[#lines + 1] = L.OUTFIT_TIP:format(table.concat(outfit, ", ")) end
-				if not lines[1] and need then lines[1] = L.QUEST_NEED_TIP:format(need.quest, need.have, need.need) end
-				local blue = W.Skin.COLORS.blue
-				for _, line in ipairs(lines) do GameTooltip:AddLine(line, blue[1], blue[2], blue[3], true) end
-				-- (shown again only without the game's coins in it: an addon-asked showing breaks their widths)
-				if lines[1] then W.Util.ShowTooltipAgain(GameTooltip) end
+				-- (the game writes the tooltip again while it is shown: with its post call, the words come back each time)
+				if not wordsFollow then AddWords(square) end
 			end)
+			button.wandererOurWords = spec.name
+			-- (a controller: the bottom button uses the item, the top one takes it in hand)
+			if ok then button.padPrimary, button.padSecondary = "RightButton", "LeftButton" end
 		end
 		button:SetID(slot)
+		-- (a controller: its left button opens the item's choices, as Alt + click)
+		button.padAlt = function(square) if square.wandererItem then ns.ItemMenu(square, square.wandererItem) end end
 		-- An empty square still looks like a slot of a bag.
 		local ground = button:CreateTexture(nil, "BACKGROUND", nil, -6)
 		ground:SetAllPoints()
@@ -581,6 +605,8 @@ function ns.NewInventory(spec)
 	end
 
 	local function PaintPick(button, item)
+		-- (a controller reaches the veil over the square, never the square under it: a click there would use the item)
+		button.padPass = selecting and item ~= nil or nil
 		if not (selecting and item) then
 			if button.wandererPick then button.wandererPick:Hide() end
 			return
@@ -1091,7 +1117,8 @@ function ns.NewInventory(spec)
 							Paint(button, nil, settings, query)
 						else
 							Paint(button, entry, settings, query)
-							if SELLABLE[kind] then section.value = section.value + (U.SellPrice(entry.link) or 0) * entry.count end
+							-- (what is never sold counts for nothing: the sale leaves it aside)
+							if SELLABLE[kind] and not ns.NeverSold(entry.id) then section.value = section.value + (U.SellPrice(entry.link) or 0) * entry.count end
 							if AUCTION_VALUE[kind] then
 								local price = ns.AuctionPrice(entry.link)
 								if price then section.auctionValue = (section.auctionValue or 0) + price * entry.count end
@@ -1542,6 +1569,7 @@ function ns.NewInventory(spec)
 		self.cogRoom = cog and 24 or 0
 		if spec.help then W.Skin.Help(window, spec.help, "HEADING") end
 		-- Its links, right to left from the "?": only what depends on where you are.
+		if spec.padClose and W.Skin.PadWindow then W.Skin.PadWindow(window, { closeBinding = spec.padClose }) end
 		if spec.actions then spec.actions(window, function(link) links[#links + 1] = link end) end
 		self.ChainLinks()
 		-- Choosing several items (or one) to act on them together, without Alt: a button of its own, beside

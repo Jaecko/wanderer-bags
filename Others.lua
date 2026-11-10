@@ -130,7 +130,6 @@ local function Rows(id)
 	end
 	return rows[1] and rows or nil
 end
-ns.OthersRows = Rows -- (tests)
 
 function ns.InitOthers()
 	W.OnCharacterForgotten(ns.ForgetCharacter)

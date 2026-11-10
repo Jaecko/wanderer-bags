@@ -220,13 +220,6 @@ function ns.MarkedInBags()
 	return list
 end
 
--- How many of an item one slot holds.
-local function MaxStack(id)
-	local max = C_Item and C_Item.GetItemMaxStackSizeByID and Clean(Safe(C_Item.GetItemMaxStackSizeByID, id))
-	if not max then max = Clean(select(8, Safe(C_Item and C_Item.GetItemInfo or GetItemInfo, id))) end
-	return tonumber(max) or 1
-end
-
 -- A bag of the bank that takes only some items (a herb bag...): this one or not.
 local function Fits(bag, id)
 	local family = ns.BagFamily(bag)
@@ -241,7 +234,7 @@ local function Target(entry, taken)
 	local containers = {}
 	EachTab(CharacterKind(), function(id) containers[#containers + 1] = id end)
 	if not containers[1] then EachTab(AccountKind(), function(id) containers[#containers + 1] = id end) end
-	local max, empty = MaxStack(entry.id), nil
+	local max, empty = U.ItemMaxStack(entry.id), nil
 	for _, bag in ipairs(containers) do
 		local fits = Fits(bag, entry.id)
 		for slot = 1, ns.NumSlots(bag) do

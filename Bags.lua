@@ -63,6 +63,8 @@ local bags = ns.NewInventory({
 		ns.ShopLink(window)
 	end,
 	-- Opened or closed by itself (a link, its cross, Escape): the game's bags with it.
+	-- (a controller: the right button is the game's own key for its bags, when they are open: this window follows them)
+	padClose = function() return ns.GameBagsOpen() and "OPENALLBAGS" or nil end,
 	onShow = function() ns.GameBagsFollow(true) end,
 	onHide = function() ns.GameBagsFollow(false) end,
 })
@@ -153,7 +155,11 @@ local function FollowGame()
 	following = false
 end
 
+ns.GameBagsOpen = GameOpen
+
 function ns.GameBagsFollow(shown)
+	-- (never with a controller: the game's bags opened or closed by an addon block the game's own actions)
+	if W.Util.UsingPad and W.Util.UsingPad() then return end
 	if following or not On() or GameOpen() == shown then return end
 	following = true
 	if shown then
@@ -218,7 +224,8 @@ function ns.Init()
 			end
 			Sub(o.Button(L.OPEN_LABEL, L.OPEN, nil, function()
 				o.CloseSettings()
-				if OpenAllBags then OpenAllBags() else bags.Open() end
+				local pad = W.Util.UsingPad and W.Util.UsingPad()
+				if OpenAllBags and not pad then OpenAllBags() else bags.Open() end
 			end))
 			Check("bank", L.BANK, L.BANK_DESC)
 
