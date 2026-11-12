@@ -129,7 +129,11 @@ local function Shop()
 	return api and api.AskShopping and api or nil
 end
 -- keep: always on you (the line stays, filled up at each merchant), else once.
-local function ShopAsk(item, keep) Shop().AskShopping(item.id, keep) end
+-- (Auction switched off or gone since the menu was drawn: nothing asked)
+local function ShopAsk(item, keep)
+	local shop = Shop()
+	if shop then shop.AskShopping(item.id, keep) end
+end
 
 -- What the auction house was seen asking for an item: its price (copper) and how many days ago. Wanderer
 -- Auction's memory first, else Auctionator's.
@@ -746,17 +750,23 @@ function ns.InitMarks()
 	-- For Wanderer Auction: what you keep, what you set aside for the auction house.
 	-- (WandererBagsMarks: the older name of this very table, kept for Wanderer Auction)
 	WandererBags = type(WandererBags) == "table" and WandererBags or {}
-	WandererBags.Marks = { IsKept = ns.IsKept, IsForAuction = ns.IsForAuction, IsForBank = ns.IsForBank, AuctionPrice = ns.AuctionPrice,
+	-- (Bags off: nothing set aside for the auction house, nothing made junk; what guards an item still answers)
+	WandererBags.Marks = { IsKept = ns.IsKept, IsForBank = ns.IsForBank,
+		AuctionPrice = function(link) if ns.On() then return ns.AuctionPrice(link) end end,
 		-- (never offered at the auction house: kept or an outfit's piece; a section's items may be posted)
 		NotForAuction = ns.AuctionGuarded,
 		-- (in one of your sections: Wanderer Auction leaves it aside when selling everything)
 		InSection = function(id) return ns.Placed(id) ~= nil end,
-		-- (marked junk now: what Wanderer Auction made junk stays so only while this mark does)
-		IsJunk = function(id) return id ~= nil and ns.Mark(id) == "junk" end,
+		-- (marked junk now: what Wanderer Auction made junk stays so only while this mark does; Bags off: nil, unknown)
+		IsJunk = function(id)
+			if not ns.On() then return nil end
+			return id ~= nil and ns.Mark(id) == "junk"
+		end,
+		IsForAuction = function(id) return ns.On() and ns.IsForAuction(id) or false end,
 		Refresh = function() ns.ShopRefresh() end,
 		-- (an item set aside for the auction house that brings more at a merchant: junk now, sold at the next one)
 		ToJunk = function(id)
-			if not (id and ns.IsForAuction(id)) then return false end
+			if not (ns.On() and id and ns.IsForAuction(id)) then return false end
 			SetMarkTo(id, "junk")
 			return true
 		end,
@@ -769,9 +779,10 @@ function ns.InitMarks()
 	-- (Wanderer Auction's banker waits while the bags move items one by one)
 	WandererBags.Moving = function() return ns.Moving and ns.Moving() or false end
 	-- (Wanderer Professions: your other characters holding an item)
-	WandererBags.Carriers = function(id) return ns.Carriers and ns.Carriers(id) or {} end
-	WandererBags.AtBank = function() return ns.AtBank and ns.AtBank() or false end
-	WandererBags.TakeFromBank = function(wants) return ns.TakeFromBank and ns.TakeFromBank(wants) or false end
+	-- (Bags switched off: nothing said, nothing done)
+	WandererBags.Carriers = function(id) return ns.On() and ns.Carriers and ns.Carriers(id) or {} end
+	WandererBags.AtBank = function() return ns.On() and ns.AtBank and ns.AtBank() or false end
+	WandererBags.TakeFromBank = function(wants) return ns.On() and ns.TakeFromBank and ns.TakeFromBank(wants) or false end
 	CoverSellAllJunk()
 	-- The game's own modified click on an item also says it: Alt over one of our squares opens the menu.
 	if hooksecurefunc and HandleModifiedItemClick then

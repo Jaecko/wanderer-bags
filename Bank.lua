@@ -329,7 +329,6 @@ local function MoveOneByOne(list, move, done)
 	Step()
 	return true
 end
-ns.MoveOneByOne = MoveOneByOne
 function ns.Moving() return moving ~= nil end
 
 -- The item still there as it was read (the same item, not held): its info.
@@ -483,7 +482,8 @@ function ns.TakeOutfit()
 end
 function ns.OutfitTip()
 	local found = ns.Bank.window and ns.Bank.window.outfitFound
-	return found and { L.TAKE_OUTFIT_TITLE, { L.TAKE_OUTFIT_DESC:format(found.name), 0.9, 0.88, 0.82 } } or nil
+	local ink = W.Skin.COLORS.text
+	return found and { L.TAKE_OUTFIT_TITLE, { L.TAKE_OUTFIT_DESC:format(found.name), ink[1], ink[2], ink[3] } } or nil
 end
 
 -- The window ---------------------------------------------------------------------------------

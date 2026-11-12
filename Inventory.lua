@@ -66,9 +66,14 @@ local function MarkOf(id)
 		if value then return mark, value end
 	end
 end
+-- A text key's words, its pad variant (<KEY>_PAD: the left button, not Alt+click) under the pad.
+local function PadWords(key)
+	if not key then return nil end
+	return (U and U.UsingPad and U.UsingPad() and L[key .. "_PAD"]) or L[key]
+end
 -- A mark's words (key: "tip" or "blocked"), its section's name put in.
 local function MarkWords(mark, value, key)
-	local words = mark and mark[key] and L[mark[key]]
+	local words = mark and PadWords(mark[key])
 	if words and mark[key] == "SECTION_BLOCKED" then words = words:format(value) end
 	return words
 end
@@ -367,12 +372,23 @@ end
 local function Heading(window, title, settings)
 	return W.Skin.Header(window, "Wanderer", title, settings and { settings = settings } or nil)
 end
-ns.Heading = Heading
 
--- A question with a box under its words (the sale's "sell them too"), made of Wanderer's pieces: words(on) drawn
--- again as the box changes, accept(on) on yes; no, Escape or the cross let it go.
+-- A question with a box under its words (the sale's "sell them too"): words(on) drawn again as the box changes,
+-- accept(on) on yes; no, Escape or the cross let it go. Wanderer's own question from its API 21 (its box), else
+-- one made here of Wanderer's pieces.
 local boxAsk
 function ns.AskWithBox(words, label, accept)
+	if (W.API or 1) >= 21 then
+		local on = false
+		local check
+		local function Yes() accept(on) end
+		check = { label = label, get = function() return on end, set = function(value)
+			on = value and true or false
+			-- (asked again in its place, the same box: the words follow it)
+			W.Skin.Ask(words(on), Yes, { check = check })
+		end }
+		return W.Skin.Ask(words(false), Yes, { check = check })
+	end
 	local frame = boxAsk
 	if not frame then
 		frame = W.Skin.CreateWindow("WandererBagsAsk", "DIALOG")
@@ -523,8 +539,8 @@ function ns.NewInventory(spec)
 					local mark, value = MarkOf(item and item.id)
 					local words = W.IsMerchantOpen() and (MarkWords(mark, value, "blocked")
 						or (item and ns.QuestNeed(item.id) and L.QUEST_BLOCKED))
-						or (ns.Mark(item and item.id) == "keep" and L.KEPT_BLOCKED or L.OUTFIT_BLOCKED)
-					UIErrorsFrame:AddMessage(words or L.KEPT_BLOCKED, 1, 0.1, 0.1)
+						or (ns.Mark(item and item.id) == "keep" and PadWords("KEPT_BLOCKED") or L.OUTFIT_BLOCKED)
+					UIErrorsFrame:AddMessage(words or PadWords("KEPT_BLOCKED"), 1, 0.1, 0.1)
 				end
 			end)
 			-- Kept: said in its tooltip, with how to free it.
@@ -543,8 +559,10 @@ function ns.NewInventory(spec)
 				if not wordsFollow then AddWords(square) end
 			end)
 			button.wandererOurWords = spec.name
-			-- (a controller: the bottom button uses the item, the top one takes it in hand)
-			if ok then button.padPrimary, button.padSecondary = "RightButton", "LeftButton" end
+			-- (a controller: the bottom button uses the item, the top one takes it in hand, said under the window)
+			if ok then
+				button.padPrimary, button.padSecondary, button.padSecondaryWord = "RightButton", "LeftButton", L.PAD_IN_HAND
+			end
 		end
 		button:SetID(slot)
 		-- (a controller: its left button opens the item's choices, as Alt + click)
@@ -573,7 +591,7 @@ function ns.NewInventory(spec)
 		button.wandererLevel:SetPoint("BOTTOMLEFT", button, "BOTTOMLEFT", 2, 2)
 		-- (binds when equipped: a few quiet letters over the level, no glow)
 		button.wandererBoe = button:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmall")
-		button.wandererBoe:SetTextColor(0.85, 0.85, 0.85)
+		button.wandererBoe:SetTextColor(Wanderer.Skin.COLORS.soft[1], Wanderer.Skin.COLORS.soft[2], Wanderer.Skin.COLORS.soft[3])
 		-- (the free slots' square: how many, in its middle)
 		button.wandererFree = W.Skin.Text(button, "GameTooltipText", "soft")
 		button.wandererFree:SetPoint("CENTER", button, "CENTER", 0, 0)
@@ -589,11 +607,12 @@ function ns.NewInventory(spec)
 		local pick = CreateFrame("Button", nil, button)
 		pick:SetAllPoints()
 		pick:SetFrameLevel(button:GetFrameLevel() + 10)
-		pick:RegisterForClicks("LeftButtonUp", "RightButtonUp") pick.padRight = true
+		pick:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 		pick.veil = pick:CreateTexture(nil, "OVERLAY")
 		pick.veil:SetAllPoints()
-		pick.veil:SetColorTexture(1, 0.82, 0, 0.22)
-		pick.edges = W.Skin.Edges(pick, 1, 0.82, 0, 0.9)
+		local gold = W.Skin.COLORS.gold
+		pick.veil:SetColorTexture(gold[1], gold[2], gold[3], 0.22)
+		pick.edges = W.Skin.Edges(pick, gold[1], gold[2], gold[3], 0.9)
 		pick.check = pick:CreateTexture(nil, "OVERLAY", nil, 2)
 		pick.check:SetSize(16, 16)
 		pick.check:SetPoint("BOTTOMRIGHT", pick, "BOTTOMRIGHT", 2, -2)
@@ -815,7 +834,8 @@ function ns.NewInventory(spec)
 		if header then return header end
 		header = CreateFrame("Button", nil, content)
 		header:SetHeight(HEADER_HEIGHT)
-		header:RegisterForClicks("LeftButtonUp", "RightButtonUp") header.padRight = true
+		header:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+		header.padRight, header.padRightWord = true, L.PAD_CARD -- (its right click: the section's card)
 		header.ground = header:CreateTexture(nil, "BACKGROUND")
 		header.ground:SetAllPoints()
 		header.ground:SetColorTexture(1, 1, 1, 0)
@@ -830,7 +850,7 @@ function ns.NewInventory(spec)
 		header.sell = W.Skin.SmallButton(header, L.SELL, function()
 			local section = header.section
 			Sell(section and section.items or {}, nil, section and section.key == "others")
-		end, L.SELL_DESC, 18)
+		end, function() return PadWords("SELL_DESC") end, 18)
 		header.sell:SetPoint("RIGHT", header, "RIGHT", -MoreRoom(), 0)
 		header.value = W.Skin.Text(header, "GameTooltipTextSmall", "label")
 		header.value:SetJustifyH("RIGHT")
@@ -850,15 +870,12 @@ function ns.NewInventory(spec)
 			end
 		end)
 		header:HookScript("OnEnter", function(frame)
-			frame.ground:SetColorTexture(1, 1, 1, 0.04)
+			frame.ground:SetColorTexture(1, 1, 1, W.Skin.HOVER or 0.05)
 			local gold = W.Skin.COLORS.gold
 			frame.chevron:SetVertexColor(gold[1], gold[2], gold[3])
 			-- (its title or its worth cut short for want of room: whole, under the mouse)
 			if frame.fullTitle then
-				GameTooltip:SetOwner(frame, "ANCHOR_TOP")
-				GameTooltip:AddLine(frame.fullTitle, 1, 1, 1, true)
-				if frame.fullValue then GameTooltip:AddLine(frame.fullValue, 1, 1, 1, true) end
-				GameTooltip:Show()
+				W.Skin.ShowTip(frame, { { frame.fullTitle, 1, 1, 1 }, frame.fullValue and { frame.fullValue, 1, 1, 1 } or nil }, "ANCHOR_TOP")
 			end
 		end)
 		header:HookScript("OnLeave", function(frame)
@@ -867,7 +884,7 @@ function ns.NewInventory(spec)
 			frame.chevron:SetVertexColor(label[1], label[2], label[3])
 			if GameTooltip:IsOwned(frame) then GameTooltip:Hide() end
 		end)
-		W.Skin.Tooltip(header.more, L.SECTION_TIP, "ANCHOR_TOP")
+		W.Skin.Tooltip(header.more, function() return PadWords("SECTION_TIP") end, "ANCHOR_TOP")
 		headers[index] = header
 		return header
 	end
@@ -1211,6 +1228,8 @@ function ns.NewInventory(spec)
 			local showHint = not selecting and ns.MarkHintShown() or false
 			hintText:SetShown(showHint)
 			if showHint then
+				-- (a controller in hand: its own button named)
+				hintText:SetText(U and U.UsingPad and U.UsingPad() and L.MARK_HINT_PAD or L.MARK_HINT)
 				hintText:SetWidth(width)
 				hintRoom = U.Measure(hintText, "GetStringHeight", 12) + 6
 				hintShown = true
@@ -1415,7 +1434,7 @@ function ns.NewInventory(spec)
 		end
 		local count = 0
 		for _ in pairs(picked) do count = count + 1 end
-		bar.count:SetText(count > 0 and L.PICKED:format(count) or L.PICK_HINT)
+		bar.count:SetText(count > 0 and L.PICKED:format(count) or (U.UsingPad and U.UsingPad()) and L.PICK_HINT_PAD or L.PICK_HINT)
 		local x, y, line, group = 0, 24, 26, nil
 		for _, action in ipairs(ACTIONS) do
 			local link = bar.links[action.key]
@@ -1508,6 +1527,7 @@ function ns.NewInventory(spec)
 		local room = CreateFrame("Frame", nil, window)
 		room:SetAllPoints(freeText)
 		room:EnableMouse(true)
+		room.padTip = true -- (a controller reaches it to read it)
 		-- (nearly full: the cheapest things carried; a search: what your other characters have, whole)
 		W.Skin.Tooltip(room, function()
 			if elsewhereShown then return freeText:GetText() end
@@ -1567,7 +1587,15 @@ function ns.NewInventory(spec)
 		local cog = window.cog
 		cog = type(cog) == "table" and cog.IsShown and cog or nil
 		self.cogRoom = cog and 24 or 0
-		if spec.help then W.Skin.Help(window, spec.help, "HEADING") end
+		if spec.help then
+			local help = W.Skin.Help(window, spec.help, "HEADING")
+			-- (with a controller: spec.helpPad, its buttons instead of the mouse's)
+			if help and spec.helpPad then
+				help:HookScript("OnEnter", function(frame)
+					if U.UsingPad and U.UsingPad() then W.Skin.ShowTip(frame, spec.helpPad, "ANCHOR_BOTTOM") end
+				end)
+			end
+		end
 		-- Its links, right to left from the "?": only what depends on where you are.
 		if spec.padClose and W.Skin.PadWindow then W.Skin.PadWindow(window, { closeBinding = spec.padClose }) end
 		if spec.actions then spec.actions(window, function(link) links[#links + 1] = link end) end
@@ -1584,7 +1612,7 @@ function ns.NewInventory(spec)
 			selectButton:SetHeight(22)
 			selectButton:SetPoint("RIGHT", window, "RIGHT", -margin, 0)
 			selectButton:SetPoint("TOP", title, "BOTTOM", 0, -7)
-			W.Skin.Tooltip(selectButton, L.SELECT_DESC, "ANCHOR_BOTTOM")
+			W.Skin.Tooltip(selectButton, function() return PadWords("SELECT_DESC") end, "ANCHOR_BOTTOM")
 		end
 		-- The search, the whole width (up to the selection's button).
 		searchBox = W.Skin.CreateInput(window, spec.name .. "Search", 40, {
@@ -1597,7 +1625,8 @@ function ns.NewInventory(spec)
 		})
 		searchBox:SetHeight(20)
 		-- (its words, under the mouse: levels, qualities, signs)
-		W.Skin.Tooltip(searchBox, { L.SEARCH_HELP_TITLE, { L.SEARCH_HELP, 0.9, 0.88, 0.82 } }, "ANCHOR_BOTTOM")
+		local ink = W.Skin.COLORS.text
+		W.Skin.Tooltip(searchBox, { L.SEARCH_HELP_TITLE, { L.SEARCH_HELP, ink[1], ink[2], ink[3] } }, "ANCHOR_BOTTOM")
 		searchBox:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 		if selectButton then
 			searchBox:SetPoint("RIGHT", selectButton, "LEFT", -6, 0)

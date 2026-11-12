@@ -16,7 +16,6 @@ local Safe, Clean = U and U.Safe, U and U.Clean
 -- Another bags addon (Baganator, Bagnon, AdiBags, ArkInventory, ElvUI's bags) has the bags: Wanderer Bags steps
 -- aside, the game's bag windows stay that addon's (what you keep stays guarded at merchants).
 local function Yielded() return W and W.Yields and W.Yields("bags") and true or false end
-ns.Yielded = Yielded
 
 local function On()
 	local settings = ns.Settings()
@@ -43,6 +42,7 @@ local bags = ns.NewInventory({
 	selectable = true,
 	markHint = true,
 	help = L.HELP_TIP,
+	helpPad = L.HELP_TIP_PAD,
 	settings = "ext:bags",
 	-- The footer's Sort: the game's own sorting.
 	sort = function() Safe(C_Container.SortBags) end,
@@ -212,6 +212,8 @@ function ns.Init()
 		-- look, what is done for you)
 		options = function(o)
 			local enabled = o.Checkbox("bags", "enabled", L.ENABLE, L.ENABLE_DESC, ns.RefreshAll)
+			-- (with a controller: the bottom button uses, the top one takes in hand)
+			if type(enabled) == "table" then enabled.descPad = L.ENABLE_DESC_PAD end
 			-- (greyed while another bags addon has the bags, with its name)
 			o.Yield(enabled, "bags")
 			local isOn = o.IsOn("bags", "enabled")
@@ -227,7 +229,8 @@ function ns.Init()
 				local pad = W.Util.UsingPad and W.Util.UsingPad()
 				if OpenAllBags and not pad then OpenAllBags() else bags.Open() end
 			end))
-			Check("bank", L.BANK, L.BANK_DESC)
+			local bank = Check("bank", L.BANK, L.BANK_DESC)
+			if type(bank) == "table" then bank.descPad = L.BANK_DESC_PAD end
 
 			o.Header(L.SECTION_SORTING)
 			Sub(o.Dropdown("BAGS_LAYOUT", L.LAYOUT, L.LAYOUT_DESC, "categories",
@@ -255,7 +258,9 @@ function ns.Init()
 
 			-- (on: the mark itself is your choice; Shift held at the banker skips it once)
 			o.Header(L.SECTION_AUTOMATIONS)
-			Check("toBank", L.TO_BANK, L.TO_BANK_DESC)
+			local toBank = Check("toBank", L.TO_BANK, L.TO_BANK_DESC)
+			-- (with a controller: the left button marks, its own Shift skips)
+			if type(toBank) == "table" then toBank.descPad = L.TO_BANK_DESC_PAD end
 		end,
 	})
 	SLASH_WANDERERBAGS1 = "/wbags"
