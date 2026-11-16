@@ -260,10 +260,12 @@ end
 -- done(job) once over: { moved, left, done (the entries moved) }. Returns true when it started.
 
 local moving -- the run going on
+-- (a merchant open meanwhile: a right click's move would sell the item there, so nothing more is sent)
+local function MerchantOpen() return W.IsMerchantOpen and W.IsMerchantOpen() or false end
 local CHECKS = 4 -- steps a move sent waits for the game's answer before it is judged refused
 
 local function MoveOneByOne(list, move, done)
-	if moving or not (bankerOpen and list and list[1]) or InCombatLockdown() or GetCursorInfo() then return false end
+	if moving or not (bankerOpen and list and list[1]) or InCombatLockdown() or GetCursorInfo() or MerchantOpen() then return false end
 	local job = { list = list, index = 0, moved = 0, left = 0, waits = 0, taken = {}, done = {} }
 	moving = job
 	local function Moved(entry)
@@ -296,7 +298,7 @@ local function MoveOneByOne(list, move, done)
 	end
 	local function Step()
 		if moving ~= job then return end
-		if not bankerOpen or InCombatLockdown() then
+		if not bankerOpen or InCombatLockdown() or MerchantOpen() then
 			-- (the move sent last still waits for the game's answer: waited for, nothing more sent)
 			if Refused(false) == nil then return C_Timer.After(STEP, Step) end
 			return Finish()

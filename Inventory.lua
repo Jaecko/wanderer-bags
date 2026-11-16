@@ -42,7 +42,10 @@ local BIND_ON_EQUIP = 2 -- (the game's bind type: when equipped)
 local RESORT_TIME = 2 -- after Sort: ranked anew that long (the game moves the items a while)
 local LOCK_MARK = "Interface\\PetBattles\\PetBattle-LockIcon"
 local AUCTION_MARK = "Interface\\Minimap\\Tracking\\Auctioneer"
-local QUEST_MARK = "Interface\\GossipFrame\\ActiveQuestIcon"
+-- Needed by a quest: the game's yellow question mark (its grey one was too faint over an icon).
+local QUEST_ATLAS, QUEST_MARK = "QuestTurnin", "Interface\\GossipFrame\\ActiveQuestIcon"
+-- In a section of yours: Wanderer's grid in its gold (the padlock is what you keep alone).
+local SECTION_MARK = "glyph:grid"
 local BANK_MARK = "Interface\\Minimap\\Tracking\\Banker"
 -- An outfit's piece: the game's hanger (its transmogrification cursor), else the transmogrifier's sign.
 local OUTFIT_ATLAS, OUTFIT_FILE = "Crosshair_Transmogrify_32", "Interface\\Minimap\\Tracking\\Transmogrifier"
@@ -53,7 +56,7 @@ ns.MARK_SIGNS = { keep = LOCK_MARK, auction = AUCTION_MARK, bank = BANK_MARK }
 -- corner sign, its tooltip line, the words when a click is refused at a merchant (each a text key).
 local MARKS = {
 	{ is = function(id) return ns.Mark(id) == "keep" end, sign = LOCK_MARK, tip = "KEPT_TIP", blocked = "KEPT_BLOCKED" },
-	{ is = function(id) return ns.Placed(id) end, sign = LOCK_MARK, tip = "SECTION_BLOCKED", blocked = "SECTION_BLOCKED" },
+	{ is = function(id) return ns.Placed(id) end, sign = SECTION_MARK, tip = "SECTION_BLOCKED", blocked = "SECTION_BLOCKED" },
 	{ is = function(id) return ns.IsForAuction(id) end, sign = AUCTION_MARK, tip = "AUCTION_TIP", blocked = "AUCTION_BLOCKED" },
 	{ is = function(id) return ns.IsForBank(id) end, sign = BANK_MARK, tip = "BANK_MARK_TIP", blocked = "BANK_BLOCKED" },
 	{ is = function(id) return ns.InOutfit(id) end, sign = OUTFIT_FILE, blocked = "OUTFIT_BLOCKED" },
@@ -155,22 +158,15 @@ end
 
 local function LiveInfo(bag, slot) return Safe(C_Container.GetContainerItemInfo, bag, slot) end
 
--- One item of a slot: what to sort it by and where it goes. Read in the bags,
--- or from a source (a bank seen before), where nothing is new or for a quest; inBank: an item of the bank.
-local function Read(bag, slot, source, inBank)
-	local info = (source or LiveInfo)(bag, slot)
-	if type(info) ~= "table" then return nil end
-	local id = Clean(info.itemID)
-	local link = Clean(info.hyperlink)
-	local quality = Clean(info.quality) or 1
+-- An item's kind (gear, consumable, trade, quest, junk, other) and its equip slot, from its id, its quality,
+-- whether a merchant gives nothing for it and whether a quest asks for it. (The guild bank's search reads it too.)
+function ns.KindOf(id, quality, noValue, isQuest)
 	local _, _, _, equip, _, class = U.ItemInstant(id or 0)
 	equip, class = Clean(equip), Clean(class)
-	local quest = not source and Safe(C_Container.GetContainerItemQuestInfo, bag, slot) or nil
-	local isQuest = type(quest) == "table" and (Clean(quest.isQuestItem) or Clean(quest.questID)) and true or false
 	local kind
 	if isQuest or class == QUEST then
 		kind = "quest"
-	elseif quality == POOR and not Clean(info.hasNoValue) then
+	elseif quality == POOR and not noValue then
 		kind = "junk"
 	elseif class == WEAPON or class == ARMOR or (equip and equip ~= "" and equip ~= "INVTYPE_NON_EQUIP_IGNORE") then
 		kind = "gear"
@@ -181,6 +177,20 @@ local function Read(bag, slot, source, inBank)
 	else
 		kind = "other"
 	end
+	return kind, equip
+end
+
+-- One item of a slot: what to sort it by and where it goes. Read in the bags,
+-- or from a source (a bank seen before), where nothing is new or for a quest; inBank: an item of the bank.
+local function Read(bag, slot, source, inBank)
+	local info = (source or LiveInfo)(bag, slot)
+	if type(info) ~= "table" then return nil end
+	local id = Clean(info.itemID)
+	local link = Clean(info.hyperlink)
+	local quality = Clean(info.quality) or 1
+	local quest = not source and Safe(C_Container.GetContainerItemQuestInfo, bag, slot) or nil
+	local isQuest = type(quest) == "table" and (Clean(quest.isQuestItem) or Clean(quest.questID)) and true or false
+	local kind, equip = ns.KindOf(id, quality, Clean(info.hasNoValue), isQuest)
 	if id and not link then ns.AskItem(id) end
 	local name = U.LinkName(link) or ""
 	local level = kind == "gear" and link and Clean(Safe(C_Item and C_Item.GetDetailedItemLevelInfo, link)) or 0
@@ -328,14 +338,69 @@ local function Dim(button, query)
 	if button.SetMatchesSearch then button:SetMatchesSearch(match) else button:SetAlpha(match and 1 or 0.25) end
 end
 
--- A corner's sign: a file, or the outfit's hanger (an atlas when the game has it).
+-- A corner's sign: a file, a glyph of Wanderer's ("glyph:<name>", in its gold), or the outfit's hanger and the
+-- quest's mark (an atlas when the game has it).
+local SIGN_ATLAS = { [OUTFIT_FILE] = OUTFIT_ATLAS, [QUEST_MARK] = QUEST_ATLAS }
 local function SetSign(texture, file)
-	if file == OUTFIT_FILE and C_Texture and C_Texture.GetAtlasInfo and Clean(Safe(C_Texture.GetAtlasInfo, OUTFIT_ATLAS)) then
-		texture:SetAtlas(OUTFIT_ATLAS)
+	if file:find("glyph:", 1, true) == 1 then
+		W.Skin.GlyphOn(texture, file:sub(7))
+		return
+	end
+	texture:SetVertexColor(1, 1, 1)
+	local atlas = SIGN_ATLAS[file]
+	if atlas and C_Texture and C_Texture.GetAtlasInfo and Clean(Safe(C_Texture.GetAtlasInfo, atlas)) then
+		texture:SetAtlas(atlas)
 		return
 	end
 	texture:SetTexture(file)
 	texture:SetTexCoord(0, 1, 0, 1)
+end
+
+-- A square's cooldown spiral: the game's own (its UpdateCooldown), else read here from the container (a game
+-- whose item buttons lack it). live: a square of what is at hand (a seen one has no cooldown to read).
+local function PaintCooldown(button, item, live)
+	if button.UpdateCooldown then
+		pcall(button.UpdateCooldown, button, item ~= nil)
+		return
+	end
+	if not live then return end
+	local name = button.GetName and button:GetName()
+	local cooldown = type(button.Cooldown) == "table" and button.Cooldown or name and _G[name .. "Cooldown"]
+	if type(cooldown) ~= "table" or not cooldown.SetCooldown then return end
+	local start, duration, enable
+	if item then
+		local read = C_Container and C_Container.GetContainerItemCooldown or _G.GetContainerItemCooldown
+		if read then start, duration, enable = Safe(read, item.bag, item.slot) end
+	end
+	start, duration, enable = Clean(start) or 0, Clean(duration) or 0, Clean(enable)
+	local set = rawget(_G, "CooldownFrame_Set")
+	if set then
+		Safe(set, cooldown, start, duration, enable)
+	elseif start > 0 and duration > 0 then
+		cooldown:SetCooldown(start, duration)
+	else
+		cooldown:Hide()
+	end
+end
+
+-- A square's quest border: the game's own (its UpdateQuestItem), else its quest texture set here (a quest to
+-- start: the game's bang; a quest's item: its border).
+local function PaintQuest(button, item)
+	local quest = item and type(item.quest) == "table" and item.quest
+	local isQuestItem, questID, isActive = quest and Clean(quest.isQuestItem), quest and Clean(quest.questID),
+		quest and Clean(quest.isActive)
+	if button.UpdateQuestItem then
+		pcall(button.UpdateQuestItem, button, isQuestItem, questID, isActive)
+		return
+	end
+	local name = button.GetName and button:GetName()
+	local texture = type(button.IconQuestTexture) == "table" and button.IconQuestTexture
+		or name and _G[name .. "IconQuestTexture"]
+	if type(texture) ~= "table" or not texture.SetTexture then return end
+	local file = questID and not isActive and rawget(_G, "TEXTURE_ITEM_QUEST_BANG")
+		or (questID or isQuestItem) and rawget(_G, "TEXTURE_ITEM_QUEST_BORDER") or nil
+	if file then texture:SetTexture(file) end
+	texture:SetShown(file ~= nil)
 end
 
 -- An inventory window ------------------------------------------------------------------------
@@ -473,11 +538,31 @@ function ns.NewInventory(spec)
 		return frame
 	end
 
-	-- Alt and a click (a modified one: nothing taken, nothing used) opens your say over the item.
-	local function AltMenu(square)
-		if IsAltKeyDown() and square.wandererItem then
+	-- Alt and a left click (a modified one: nothing taken, nothing used) opens your say over the item. (Alt and a
+	-- right click stays the game's: the item used on yourself)
+	local function AltMenu(square, mouse)
+		if IsAltKeyDown() and mouse == "LeftButton" and square.wandererItem then
 			ns.ItemMenu(square, square.wandererItem)
 			return true
+		end
+	end
+
+	-- A guarded square takes no click (the game's own would sell it): a modified one does here what the game does,
+	-- nothing sold. Its link in the chat, the dressing room..., else Shift splits its stack.
+	local function GuardedModifiedClick(square, mouse)
+		local item = square.wandererItem
+		if not (item and square:IsMouseOver()) then return end
+		if item.link and HandleModifiedItemClick and HandleModifiedItemClick(item.link) then return end
+		local info = item.info
+		local count = info and Clean(info.stackCount) or 0
+		if mouse == "LeftButton" and IsModifiedClick("SPLITSTACK") and count > 1 and square.SplitStack
+			and not (info and Clean(info.isLocked)) then
+			-- (the game's stack window: it splits through the square's own SplitStack)
+			if StackSplitFrame and StackSplitFrame.OpenStackSplitFrame then
+				Safe(StackSplitFrame.OpenStackSplitFrame, StackSplitFrame, count, square, "BOTTOMLEFT", "TOPLEFT")
+			elseif rawget(_G, "OpenStackSplitFrame") then
+				Safe(rawget(_G, "OpenStackSplitFrame"), count, square, "BOTTOMLEFT", "TOPLEFT")
+			end
 		end
 	end
 
@@ -485,8 +570,8 @@ function ns.NewInventory(spec)
 	local function SavedButton()
 		local button = CreateFrame("ItemButton", nil, content)
 		W.Skin.ItemTooltip(button, function(square) return square.wandererLink end, "ANCHOR_RIGHT")
-		button:SetScript("OnClick", function(square)
-			if AltMenu(square) then return end
+		button:SetScript("OnClick", function(square, mouse)
+			if AltMenu(square, mouse) then return end
 			if square.wandererLink and HandleModifiedItemClick then HandleModifiedItemClick(square.wandererLink) end
 		end)
 		return button
@@ -530,8 +615,13 @@ function ns.NewInventory(spec)
 			local ok, made = pcall(CreateFrame, "ItemButton", ("%sItem%d_%d"):format(spec.name, bag + 10, slot),
 				BagFrame(bag), "ContainerFrameItemButtonTemplate")
 			button = ok and made or CreateFrame("Button", nil, BagFrame(bag))
-			button:HookScript("OnMouseUp", function(square)
-				if AltMenu(square) then return end
+			button:HookScript("OnMouseUp", function(square, mouse)
+				if AltMenu(square, mouse) then return end
+				-- (a modified click on a guarded item still links it, splits it, tries it on: only a plain one sells)
+				if square.wandererGuarded and IsModifiedClick and IsModifiedClick() then
+					GuardedModifiedClick(square, mouse)
+					return
+				end
 				-- Kept, where it could be sold: the click is refused, and said why (at the auction house: kept, or an
 				-- outfit's piece).
 				if square.wandererGuarded and UIErrorsFrame then
@@ -559,6 +649,7 @@ function ns.NewInventory(spec)
 				if not wordsFollow then AddWords(square) end
 			end)
 			button.wandererOurWords = spec.name
+			button.wandererLive = true
 			-- (a controller: the bottom button uses the item, the top one takes it in hand, said under the window)
 			if ok then
 				button.padPrimary, button.padSecondary, button.padSecondaryWord = "RightButton", "LeftButton", L.PAD_IN_HAND
@@ -574,8 +665,8 @@ function ns.NewInventory(spec)
 			ground:SetTexture("Interface\\Buttons\\UI-EmptySlot-Disabled")
 			ground:SetTexCoord(0.14, 0.86, 0.14, 0.86)
 		end
-		-- One sign per corner: the game's arrow or coin at the top left, your mark at the top right (a padlock, the
-		-- auction house's, the banker's, an outfit's hanger or a quest's; a soft shadow keeps it read over a bright
+		-- One sign per corner: the game's arrow or coin at the top left, your mark at the top right (a padlock, a grid
+		-- for your section, the auction house's, the banker's, an outfit's hanger or a quest's; a soft shadow keeps it read over a bright
 		-- icon), the item level at the bottom left, the game's count at the bottom right.
 		button.wandererShadow = button:CreateTexture(nil, "OVERLAY", nil, 1)
 		button.wandererShadow:SetSize(MARK_SIZE, MARK_SIZE)
@@ -657,8 +748,10 @@ function ns.NewInventory(spec)
 			SetSign(button.wandererShadow, sign)
 			button.wandererShadow:SetVertexColor(0, 0, 0, 0.7)
 		end
-		-- At a merchant, what is never sold takes no click nor drag (no sale by mistake): Alt+click changes it first. At
-		-- the auction house, only what you keep and an outfit's pieces (a section of yours is yours to post there).
+		-- At a merchant, what is never sold takes no plain click nor drag (no sale by mistake): Alt+click changes it
+		-- first, a modified click still links it, splits it, tries it on (see GuardedModifiedClick: the game's own click
+		-- left untouched, nothing protected set). At the auction house, only what you keep and an outfit's pieces (a
+		-- section of yours is yours to post there).
 		if spec.canSell and buttons == pools.live then
 			local guarded = item and ((W.IsMerchantOpen() and ns.NeverSold(item.id))
 				or (ns.Guarding() and ns.AuctionGuarded(item.id))) or false
@@ -677,7 +770,7 @@ function ns.NewInventory(spec)
 		if SetItemButtonCount then SetItemButtonCount(button, info and Clean(info.stackCount) or 0) end
 		if SetItemButtonDesaturated then SetItemButtonDesaturated(button, info and Clean(info.isLocked) and true or false) end
 		if SetItemButtonQuality then SetItemButtonQuality(button, item and item.quality, item and item.link) end
-		if button.UpdateCooldown then pcall(button.UpdateCooldown, button, item ~= nil) end
+		PaintCooldown(button, item, button.wandererLive)
 		if button.UpdateNewItem and item then
 			pcall(button.UpdateNewItem, button, item.quality)
 		elseif type(button.NewItemTexture) == "table" then
@@ -686,11 +779,7 @@ function ns.NewInventory(spec)
 			if type(button.flashAnim) == "table" and button.flashAnim.Stop then button.flashAnim:Stop() end
 			if type(button.newitemglowAnim) == "table" and button.newitemglowAnim.Stop then button.newitemglowAnim:Stop() end
 		end
-		if button.UpdateQuestItem then
-			local quest = item and type(item.quest) == "table" and item.quest
-			pcall(button.UpdateQuestItem, button, quest and Clean(quest.isQuestItem), quest and Clean(quest.questID),
-				quest and Clean(quest.isActive))
-		end
+		PaintQuest(button, item)
 		if button.SetReadable then button:SetReadable(info and Clean(info.isReadable)) end
 		if type(button.JunkIcon) == "table" then button.JunkIcon:SetShown(item and settings.junk and item.group == "junk" or false) end
 		if type(button.UpgradeIcon) == "table" then
@@ -1307,7 +1396,7 @@ function ns.NewInventory(spec)
 	function self.Cooldowns()
 		if not (window and window:IsShown()) then return end
 		EachShown(function(button)
-			if button.UpdateCooldown then pcall(button.UpdateCooldown, button, button.wandererItem ~= nil) end
+			PaintCooldown(button, button.wandererItem, button.wandererLive)
 		end)
 	end
 
@@ -1519,6 +1608,20 @@ function ns.NewInventory(spec)
 		layoutPair:SetPoint("BOTTOMLEFT", window, "BOTTOMLEFT", margin, margin - 2)
 		moneyText = W.Skin.Text(window, "GameTooltipText", "text")
 		moneyText:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -margin, margin + 2)
+		-- Your own money: a click takes some in hand, as on the game's bags (for a trade or a letter).
+		if not spec.money then
+			local purse = CreateFrame("Button", nil, window)
+			-- (the game's coin window reads these from its owner: your own money)
+			purse.moneyType, purse.hasPickup = "PLAYER", 0
+			purse:SetAllPoints(moneyText)
+			purse:SetScript("OnClick", function(button)
+				local pickup = rawget(_G, "OpenCoinPickupFrame")
+				local copper = Clean(Safe(GetMoney)) or 0
+				if pickup and copper > 0 then Safe(pickup, 1, copper, button) end
+			end)
+			W.Skin.Tooltip(purse, function() return PadWords("MONEY_TIP") end, "ANCHOR_TOP")
+			window.purse = purse
+		end
 		freeText = W.Skin.Text(window, "GameTooltipTextSmall", "muted")
 		freeText:SetPoint("LEFT", layoutPair, "RIGHT", 12, 0)
 		freeText:SetPoint("RIGHT", moneyText, "LEFT", -12, 0)

@@ -220,6 +220,8 @@ end
 local function Apply(db, id, mark)
 	db.marks[id] = mark
 	if mark == "junk" or mark == "auction" then db.placed[id] = nil end
+	-- (your own mark now: no longer the one Wanderer Auction set)
+	if type(db.madeJunk) == "table" then db.madeJunk[id] = nil end
 end
 
 -- One item given this mark (nil: none), never toggled (the Alt+click card says which one it ends with).
@@ -254,7 +256,7 @@ end
 -- Freed: no mark, no section of yours (back where its kind puts it).
 function ns.FreeMany(ids)
 	local db = DB()
-	for _, id in ipairs(ids) do db.marks[id], db.placed[id] = nil, nil end
+	for _, id in ipairs(ids) do Apply(db, id, nil) db.placed[id] = nil end
 	Changed()
 end
 
@@ -768,6 +770,10 @@ function ns.InitMarks()
 		ToJunk = function(id)
 			if not (ns.On() and id and ns.IsForAuction(id)) then return false end
 			SetMarkTo(id, "junk")
+			-- (remembered as Auction's: common or better, it waits for your click even once Auction is gone)
+			local db = DB()
+			db.madeJunk = type(db.madeJunk) == "table" and db.madeJunk or {}
+			db.madeJunk[id] = true
 			return true
 		end,
 		-- For Wanderer Outfits: an outfit's piece (never sold), what your bank held.
@@ -784,21 +790,27 @@ function ns.InitMarks()
 	WandererBags.AtBank = function() return ns.On() and ns.AtBank and ns.AtBank() or false end
 	WandererBags.TakeFromBank = function(wants) return ns.On() and ns.TakeFromBank and ns.TakeFromBank(wants) or false end
 	CoverSellAllJunk()
-	-- The game's own modified click on an item also says it: Alt over one of our squares opens the menu.
+	-- The game's own modified click on an item also says it: Alt over one of our squares opens the menu (a left
+	-- click only: Alt and a right click uses the item on yourself, the game's).
 	if hooksecurefunc and HandleModifiedItemClick then
 		hooksecurefunc("HandleModifiedItemClick", function()
 			if not IsAltKeyDown() then return end
+			local clicked = rawget(_G, "GetMouseButtonClicked")
+			if clicked and clicked() == "RightButton" then return end
 			local focus = U.MouseFocus()
 			if type(focus) == "table" and focus.wandererItem then ns.ItemMenu(focus, focus.wandererItem) end
 		end)
 	end
 	-- Wanderer's sale of the junk at merchants follows these marks.
-	W.AddJunkRule(function(id)
+	W.AddJunkRule(function(id, quality)
 		-- (kept, for the auction house or the bank, an outfit's piece: never sold, whatever the bags' window; junk:
 		-- while it is on)
 		if ns.NeverSold(id) then return false end
 		if not ns.On() then return nil end
-		if ns.Mark(id) == "junk" then return true end
-		return nil
+		if ns.Mark(id) ~= "junk" then return nil end
+		-- (made junk by Wanderer Auction, common or better: only by your click, Auction there or not)
+		local made = DB().madeJunk
+		if W.JUNK_ASK and type(made) == "table" and made[id] and (tonumber(quality) or 0) > 0 then return "ask" end
+		return true
 	end)
 end

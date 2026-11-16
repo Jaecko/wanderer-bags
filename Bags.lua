@@ -200,7 +200,7 @@ function ns.Init()
 		slash = "/wbags",
 		title = L.TITLE,
 		news = L.NEWS_LINES,
-		defaults = { enabled = true, bank = true, toBank = true, layout = "categories", byProfession = true, columns = 10, iconSize = 36, itemLevel = true,
+		defaults = { enabled = true, bank = true, guildBank = true, toBank = true, layout = "categories", byProfession = true, columns = 10, iconSize = 36, itemLevel = true,
 			upgrade = true, junk = true, others = true, outfitSection = true, boe = true, newInPlace = false },
 		ranges = { ["bags.columns"] = { 6, 16, 1 }, ["bags.iconSize"] = { 28, 44, 2 } },
 		refresh = function()
@@ -231,6 +231,8 @@ function ns.Init()
 			end))
 			local bank = Check("bank", L.BANK, L.BANK_DESC)
 			if type(bank) == "table" then bank.descPad = L.BANK_DESC_PAD end
+			-- (a client with a guild bank only)
+			if ns.HasGuildBank and ns.HasGuildBank() then Check("guildBank", L.GUILD_OPTION, L.GUILD_OPTION_DESC) end
 
 			o.Header(L.SECTION_SORTING)
 			Sub(o.Dropdown("BAGS_LAYOUT", L.LAYOUT, L.LAYOUT_DESC, "categories",
@@ -274,6 +276,7 @@ function ns.Init()
 	FollowBags()
 	ns.InitMarks()
 	ns.InitBank()
+	if ns.InitGuildBank then ns.InitGuildBank() end
 	ns.InitOthers()
 	local events = CreateFrame("Frame")
 	for _, event in ipairs({ "BAG_UPDATE_DELAYED", "ITEM_LOCK_CHANGED", "BAG_UPDATE_COOLDOWN", "PLAYER_MONEY",

@@ -3,7 +3,7 @@
 Your bags and your bank in one quiet window, made for World of Warcraft Forever.
 An extension of [Wanderer](https://github.com/Jaecko/wanderer): it needs Wanderer 1.4 or later.
 
-- All your bags in one Wanderer window, sorted by kind or bag by bag; items keep their place while the window is open.
+- All your bags in one Wanderer window (key B, or /wbags), sorted by kind or bag by bag; items keep their place while the window is open.
 - Quivers, ammo pouches, soul bags and profession bags each with their own free square.
 - A search by name, kind, level (>40, 30-40), quality, BoE or equip slot, with ! for "without" and | for "or".
 - The item level, "BoE", Wanderer's green arrow on what is better for you, a coin on the junk.

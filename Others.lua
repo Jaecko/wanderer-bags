@@ -106,15 +106,19 @@ function ns.CarriedElsewhere(query)
 			for id in pairs(kept.bank or {}) do ids[id] = true end
 			for id in pairs(ids) do
 				local lower, name = NameOf(id)
-				if lower and name and lower:find(query, 1, true) and count < MAX_FOUND then
+				if lower and name and lower:find(query, 1, true) then
 					count = count + 1
-					local amount = Amount((kept.items or {})[id] or 0, (kept.bank or {})[id] or 0)
-					parts[#parts + 1] = ClassColoredName(who.name, who.class) .. ": " .. name .. " " .. amount
+					if count <= MAX_FOUND then
+						local amount = Amount((kept.items or {})[id] or 0, (kept.bank or {})[id] or 0)
+						parts[#parts + 1] = ClassColoredName(who.name, who.class) .. ": " .. name .. " " .. amount
+					end
 				end
 			end
 		end
 	end
 	if not parts[1] then return nil end
+	-- (more found than said: counted)
+	if count > MAX_FOUND then parts[#parts + 1] = "+" .. (count - MAX_FOUND) end
 	return L.OTHERS_LINE:format(table.concat(parts, U.SEPARATOR))
 end
 
