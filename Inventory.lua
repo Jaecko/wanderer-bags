@@ -930,7 +930,17 @@ function ns.NewInventory(spec)
 		header.ground:SetColorTexture(1, 1, 1, 0)
 		header.chevron = W.Skin.Glyph(header, "down", 10)
 		header.chevron:SetPoint("LEFT", header, "LEFT", 2, 0)
-		header.text = W.Skin.CreateKicker(header)
+		-- (the game look: the game's list hover under the mouse, its plus and minus, its small gold title as written)
+		if W.Skin.GameWindows() then
+			header.gameLook = true
+			if W.Skin.GameAtlas(header.ground, "Options_List_Hover") then
+				header.gameHover = true
+				header.ground:Hide()
+			end
+			header.text = W.Skin.Text(header, "GameFontNormalSmall", "label")
+		else
+			header.text = W.Skin.CreateKicker(header)
+		end
 		header.text:SetPoint("LEFT", header.chevron, "RIGHT", 6, 0)
 		header.text:SetJustifyH("LEFT")
 		if header.text.SetWordWrap then header.text:SetWordWrap(false) end
@@ -945,7 +955,9 @@ function ns.NewInventory(spec)
 		header.value:SetJustifyH("RIGHT")
 		header.rule = header:CreateTexture(nil, "ARTWORK")
 		header.rule:SetHeight(1)
-		W.Skin.FadingRule(header.rule, 0.15)
+		if not (header.gameLook and W.Skin.GameAtlas(header.rule, "Options_HorizontalDivider")) then
+			W.Skin.FadingRule(header.rule, 0.15)
+		end
 		header.rule:SetPoint("LEFT", header.count, "RIGHT", 8, 0)
 		header.rule:SetPoint("RIGHT", header.value, "LEFT", -8, 0)
 		header.more = W.Skin.RowMore(header, function(frame) OpenCard(frame) end)
@@ -959,18 +971,18 @@ function ns.NewInventory(spec)
 			end
 		end)
 		header:HookScript("OnEnter", function(frame)
-			frame.ground:SetColorTexture(1, 1, 1, W.Skin.HOVER or 0.05)
+			if frame.gameHover then frame.ground:Show() else frame.ground:SetColorTexture(1, 1, 1, W.Skin.HOVER or 0.05) end
 			local gold = W.Skin.COLORS.gold
-			frame.chevron:SetVertexColor(gold[1], gold[2], gold[3])
+			if not frame.gameSign then frame.chevron:SetVertexColor(gold[1], gold[2], gold[3]) end
 			-- (its title or its worth cut short for want of room: whole, under the mouse)
 			if frame.fullTitle then
 				W.Skin.ShowTip(frame, { { frame.fullTitle, 1, 1, 1 }, frame.fullValue and { frame.fullValue, 1, 1, 1 } or nil }, "ANCHOR_TOP")
 			end
 		end)
 		header:HookScript("OnLeave", function(frame)
-			frame.ground:SetColorTexture(1, 1, 1, 0)
+			if frame.gameHover then frame.ground:Hide() else frame.ground:SetColorTexture(1, 1, 1, 0) end
 			local label = W.Skin.COLORS.label
-			frame.chevron:SetVertexColor(label[1], label[2], label[3])
+			if not frame.gameSign then frame.chevron:SetVertexColor(label[1], label[2], label[3]) end
 			if GameTooltip:IsOwned(frame) then GameTooltip:Hide() end
 		end)
 		W.Skin.Tooltip(header.more, function() return PadWords("SECTION_TIP") end, "ANCHOR_TOP")
@@ -1021,8 +1033,14 @@ function ns.NewInventory(spec)
 				if (section.auctionValue or 0) > 0 then
 					value = value .. (value ~= "" and "   " or "") .. W.Skin.Colorize(L.AUCTION_VALUE:format(U.Coins(section.auctionValue)), "blue")
 				end
-				W.Skin.SetGlyph(header.chevron, folded and "chevron" or "down")
-				header.text:SetText(Upper(section.title))
+				-- (the game look: the game's plus and minus, its own colors; else Wanderer's chevron)
+				header.gameSign = header.gameLook and W.Skin.GameAtlas(header.chevron, folded and "common-button-list-plus" or "common-button-list-minus") or nil
+				if header.gameSign then
+					header.chevron:SetVertexColor(1, 1, 1)
+				else
+					W.Skin.SetGlyph(header.chevron, folded and "chevron" or "down")
+				end
+				header.text:SetText(header.gameLook and section.title or Upper(section.title))
 				header.count:SetText(tostring(section.count or #section.buttons))
 				header.value:SetText(value)
 				header:ClearAllPoints()
