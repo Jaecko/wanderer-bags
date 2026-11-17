@@ -1036,7 +1036,7 @@ function ns.NewInventory(spec)
 					value = value .. (value ~= "" and "   " or "") .. W.Skin.Colorize(L.AUCTION_VALUE:format(U.Coins(section.auctionValue)), "blue")
 				end
 				-- (the game look: the game's plus and minus, its own colors; else Wanderer's chevron)
-				header.gameSign = header.gameLook and W.Skin.GameAtlas(header.chevron, folded and "common-button-list-plus" or "common-button-list-minus") or nil
+				header.gameSign = header.gameLook and W.Skin.FoldSign and W.Skin.FoldSign(header.chevron, folded) or nil
 				if header.gameSign then
 					header.chevron:SetVertexColor(1, 1, 1)
 				else
