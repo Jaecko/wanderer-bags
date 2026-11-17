@@ -1381,16 +1381,30 @@ function ns.NewInventory(spec)
 	-- The links shown, right to left from the "?" and the cross, without a gap for the hidden ones.
 	function self.ChainLinks()
 		local previous
+		-- (the game look: the title in the game's bar, its links are the game's buttons: on the search's line, right to
+		-- left from the selection's button, the search up to them)
+		local game = W.Skin.GameWindows and W.Skin.GameWindows() and window and window.titleText and searchBox
 		for _, link in ipairs(links) do
 			link:ClearAllPoints()
 			if link:IsShown() then
 				if previous then
 					link:SetPoint("RIGHT", previous, "LEFT", -6, 0)
+				elseif game then
+					if selectButton then link:SetPoint("RIGHT", selectButton, "LEFT", -6, 0)
+					else link:SetPoint("RIGHT", window, "RIGHT", -(W.Skin.Margin() + 8), 0) end
+					link:SetPoint("TOP", window.titleText, "BOTTOM", 0, -7)
 				else
 					link:SetPoint("TOPRIGHT", window, "TOPRIGHT", -(W.Skin.Margin() + 30 + (window.help and 22 or 0) + (self.cogRoom or 0)),-(W.Skin.Margin() + 6))
 				end
 				previous = link
 			end
+		end
+		if game then
+			searchBox:ClearAllPoints()
+			searchBox:SetPoint("TOPLEFT", window.titleText, "BOTTOMLEFT", 0, -8)
+			local edge = previous or selectButton
+			if edge then searchBox:SetPoint("RIGHT", edge, "LEFT", -6, 0)
+			else searchBox:SetPoint("RIGHT", window, "RIGHT", -(W.Skin.Margin() + 8), 0) end
 		end
 	end
 
@@ -1754,6 +1768,7 @@ function ns.NewInventory(spec)
 		else
 			searchBox:SetPoint("RIGHT", window, "RIGHT", -margin, 0)
 		end
+		self.ChainLinks()
 		content = CreateFrame("Frame", nil, window)
 		content:SetPoint("TOPLEFT", window, "TOPLEFT", margin, -(margin + TOP_ROOM))
 		CreateFooter(margin)
