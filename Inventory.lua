@@ -1705,9 +1705,13 @@ function ns.NewInventory(spec)
 	local function PlaceFooter(margin)
 		layoutPair:SetShown(not spec.footTools)
 		local previous
+		-- (the game look: the arrangement's tabs, the game's, stand on the window's bottom edge)
+		local onEdge = W.Skin.GameWindows and W.Skin.GameWindows()
 		for _, piece in ipairs(self.FooterPieces()) do
 			piece:ClearAllPoints()
-			if previous then
+			if previous and onEdge and piece == layoutPair then
+				piece:SetPoint("BOTTOMLEFT", previous, "BOTTOMRIGHT", 8, -(margin - 2) + 3)
+			elseif previous then
 				piece:SetPoint("LEFT", previous, "RIGHT", 8, 0)
 			else
 				piece:SetPoint("BOTTOMLEFT", window, "BOTTOMLEFT", margin, margin - 2)
