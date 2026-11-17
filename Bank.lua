@@ -260,8 +260,13 @@ end
 -- done(job) once over: { moved, left, done (the entries moved) }. Returns true when it started.
 
 local moving -- the run going on
--- (a merchant open meanwhile: a right click's move would sell the item there, so nothing more is sent)
-local function MerchantOpen() return W.IsMerchantOpen and W.IsMerchantOpen() or false end
+-- (a merchant or a trade open meanwhile: a right click's move would sell or trade the item there, so nothing more
+-- is sent)
+local function MerchantOpen()
+	local trade = _G.TradeFrame
+	if trade and trade:IsShown() then return true end
+	return W.IsMerchantOpen and W.IsMerchantOpen() or false
+end
 local CHECKS = 4 -- steps a move sent waits for the game's answer before it is judged refused
 
 local function MoveOneByOne(list, move, done)
