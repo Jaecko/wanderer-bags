@@ -1381,39 +1381,32 @@ function ns.NewInventory(spec)
 	end
 
 	-- The links shown, right to left from the "?" and the cross, without a gap for the hidden ones.
-	local rowHooked = false
 	function self.ChainLinks()
 		-- The game look: the title in the game's bar, the links and the selection's button are the game's buttons, on
-		-- a line of their own sharing the whole width (left to right as they read), the search the whole width under.
+		-- a line of their own: the links on its left (as they read), the selection's button alone on its right, the
+		-- search the whole width under them.
 		local game = W.Skin.GameWindows and W.Skin.GameWindows() and window and window.titleText and searchBox
 		if game then
-			local row = {}
+			local inset = W.Skin.Margin() + 8
+			local previous
 			for index = #links, 1, -1 do
 				local link = links[index]
 				link:ClearAllPoints()
-				if link:IsShown() then row[#row + 1] = link end
+				if link:IsShown() then
+					if previous then link:SetPoint("LEFT", previous, "RIGHT", 6, 0)
+					else link:SetPoint("TOPLEFT", window.titleText, "BOTTOMLEFT", 0, -7) end
+					previous = link
+				end
 			end
 			if selectButton then
 				selectButton:ClearAllPoints()
-				row[#row + 1] = selectButton
+				selectButton:SetPoint("RIGHT", window, "RIGHT", -inset, 0)
+				selectButton:SetPoint("TOP", window.titleText, "BOTTOM", 0, -7)
 			end
-			local inset = W.Skin.Margin() + 8
-			local titleLeft, windowLeft = window.titleText:GetLeft(), window:GetLeft()
-			local left = (titleLeft and windowLeft) and (titleLeft - windowLeft) or inset
-			local each = #row > 0 and math.max(40, ((window:GetWidth() or 0) - left - inset - 6 * (#row - 1)) / #row) or 0
-			for index, button in ipairs(row) do
-				button:SetWidth(each)
-				if index == 1 then button:SetPoint("TOPLEFT", window.titleText, "BOTTOMLEFT", 0, -7)
-				else button:SetPoint("LEFT", row[index - 1], "RIGHT", 6, 0) end
-			end
+			local any = previous or selectButton
 			searchBox:ClearAllPoints()
-			searchBox:SetPoint("TOPLEFT", window.titleText, "BOTTOMLEFT", 0, -8 - (#row > 0 and GAME_ROW or 0))
+			searchBox:SetPoint("TOPLEFT", window.titleText, "BOTTOMLEFT", 0, -8 - (any and GAME_ROW or 0))
 			searchBox:SetPoint("RIGHT", window, "RIGHT", -inset, 0)
-			-- (the window grows or shrinks with what the bags hold: the line follows)
-			if not rowHooked then
-				rowHooked = true
-				window:HookScript("OnSizeChanged", function() self.ChainLinks() end)
-			end
 			return
 		end
 		local previous
