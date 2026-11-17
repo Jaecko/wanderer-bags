@@ -23,6 +23,9 @@ local PER_GROUP, ROWS = 14, 7 -- the game draws them in seven groups of two colu
 local GAP, GROUP_GAP = 4, 10
 local TAB_WIDTH, TAB_HEIGHT = 176, 32
 local FOOT = 34
+-- (the game look: the heading in the game's bar, the chips on the cog's line, all under them that much higher)
+local GAME_LIFT = 50
+local function GameLook() return W.Skin.GameWindows and W.Skin.GameWindows() end
 local LOG_ROW = 20
 local DRAW_DELAY = 0.05
 
@@ -681,6 +684,8 @@ function ns.GuildDraw()
 	window.chips.left:ClearAllPoints()
 	if window.chips.access:IsShown() then
 		window.chips.left:SetPoint("LEFT", window.chips.access, "RIGHT", 6, 0)
+	elseif GameLook() then
+		window.chips.left:SetPoint("LEFT", window, "TOPLEFT", window.margin, -14)
 	else
 		window.chips.left:SetPoint("TOPLEFT", window.title, "BOTTOMLEFT", 0, -10)
 	end
@@ -739,18 +744,23 @@ local function Create()
 	Skin.Dress(window, { "TOPLEFT", UIParent, "TOPLEFT", 40, -120 }, "WandererBagsGuildBankPos")
 	local _, title, margin = Skin.Header(window, L.GUILD_BANK, L.GUILD_BANK, { margin = 10, settings = "ext:bags" }, "GameFontNormalLarge")
 	window.title, window.margin = title, margin
-	window.bodyTop = -(margin + 104)
-	if Skin.Help then Skin.Help(window, L.GUILD_HELP, "HEADING") end
+	local game = GameLook()
+	local lift = game and GAME_LIFT or 0
+	window.bodyTop = -(margin + 104) + lift
+	local help = Skin.Help and Skin.Help(window, L.GUILD_HELP, "HEADING")
 	-- The game's own window, on the right (the "?", the cog and the cross after it).
 	window.game = Skin.SmallButton(window, Skin.GlyphText("move", "label") .. " " .. L.GUILD_GAME, function()
 		ns.GuildUseGame(true)
 	end, L.GUILD_GAME_DESC)
-	window.game:SetPoint("TOPRIGHT", window, "TOPRIGHT", -(margin + 78), -margin + 2)
+	-- (the game look: level with the "?" and the cog; the chips on that line, where the title was)
+	if game and help then window.game:SetPoint("RIGHT", help, "LEFT", -6, 0)
+	else window.game:SetPoint("TOPRIGHT", window, "TOPRIGHT", -(margin + 78), -margin + 2) end
 	window.chips = { access = Chip(L.GUILD_ACCESS_TIP), left = Chip(L.GUILD_LEFT_TIP) }
-	window.chips.access:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -10)
+	if game then window.chips.access:SetPoint("LEFT", window, "TOPLEFT", margin, -14)
+	else window.chips.access:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -10) end
 	-- The pages, over a thin rule.
 	local rule = Skin.Rule(window)
-	rule:SetPoint("TOPLEFT", window, "TOPLEFT", margin, -(margin + 92))
+	rule:SetPoint("TOPLEFT", window, "TOPLEFT", margin, -(margin + 92) + lift)
 	rule:SetPoint("RIGHT", window, "RIGHT", -margin, 0)
 	window.tabs = Skin.Tabs(window, { { "items", L.GUILD_PAGE_ITEMS }, { "log", L.GUILD_PAGE_LOG }, { "money", L.GUILD_PAGE_MONEY },
 		{ "info", L.GUILD_PAGE_INFO } }, function(name) ns.GuildPage(name) end)
