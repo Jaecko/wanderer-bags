@@ -1705,12 +1705,23 @@ function ns.NewInventory(spec)
 	local function PlaceFooter(margin)
 		layoutPair:SetShown(not spec.footTools)
 		local previous
-		-- (the game look: the arrangement's tabs, the game's, stand on the window's bottom edge)
+		-- (the game look: the arrangement's tabs, the game's, first and standing on the window's bottom edge; what
+		-- follows them at its own height)
 		local onEdge = W.Skin.GameWindows and W.Skin.GameWindows()
-		for _, piece in ipairs(self.FooterPieces()) do
+		local pieces = self.FooterPieces()
+		if onEdge and layoutPair:IsShown() then
+			for index, piece in ipairs(pieces) do
+				if piece == layoutPair then table.remove(pieces, index) break end
+			end
+			table.insert(pieces, 1, layoutPair)
+		end
+		local lift = margin - 5
+		for _, piece in ipairs(pieces) do
 			piece:ClearAllPoints()
-			if previous and onEdge and piece == layoutPair then
-				piece:SetPoint("BOTTOMLEFT", previous, "BOTTOMRIGHT", 8, -(margin - 2) + 3)
+			if onEdge and piece == layoutPair and not previous then
+				piece:SetPoint("BOTTOMLEFT", window, "BOTTOMLEFT", margin, 3)
+			elseif onEdge and previous == layoutPair then
+				piece:SetPoint("BOTTOMLEFT", previous, "BOTTOMRIGHT", 8, lift)
 			elseif previous then
 				piece:SetPoint("LEFT", previous, "RIGHT", 8, 0)
 			else
@@ -1721,7 +1732,7 @@ function ns.NewInventory(spec)
 		freeText:ClearAllPoints()
 		if previous then
 			-- (level with the money, not with the tabs set lower on the edge)
-			freeText:SetPoint("LEFT", previous, "RIGHT", 12, (onEdge and previous == layoutPair) and (margin - 5) or 0)
+			freeText:SetPoint("LEFT", previous, "RIGHT", 12, (onEdge and previous == layoutPair) and lift or 0)
 		else
 			freeText:SetPoint("BOTTOMLEFT", window, "BOTTOMLEFT", margin, margin + 2)
 		end
@@ -1736,7 +1747,9 @@ function ns.NewInventory(spec)
 		window.titleText = title
 		-- How full, beside the title: quiet.
 		countText = W.Skin.Text(window, "GameTooltipTextSmall", "muted")
-		countText:SetPoint("BOTTOMLEFT", title, "BOTTOMRIGHT", 8, 1)
+		-- (the game look: the title is in the game's bar, so the count takes its place, over the first button)
+		if W.Skin.GameWindows and W.Skin.GameWindows() then countText:SetPoint("BOTTOMLEFT", title, "BOTTOMLEFT", 0, 1)
+		else countText:SetPoint("BOTTOMLEFT", title, "BOTTOMRIGHT", 8, 1) end
 		-- What can be done here, said once: a "?" by the cross (by the cog, when Wanderer draws one), Wanderer's
 		-- heading corner.
 		local cog = window.cog
