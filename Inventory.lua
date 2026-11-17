@@ -1720,7 +1720,8 @@ function ns.NewInventory(spec)
 		end
 		freeText:ClearAllPoints()
 		if previous then
-			freeText:SetPoint("LEFT", previous, "RIGHT", 12, 0)
+			-- (level with the money, not with the tabs set lower on the edge)
+			freeText:SetPoint("LEFT", previous, "RIGHT", 12, (onEdge and previous == layoutPair) and (margin - 5) or 0)
 		else
 			freeText:SetPoint("BOTTOMLEFT", window, "BOTTOMLEFT", margin, margin + 2)
 		end
