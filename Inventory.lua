@@ -24,8 +24,9 @@ local SECTION_GAP = 8
 local HEADER_HEIGHT = 20
 local HEADER_ROOM = HEADER_HEIGHT + 4 -- a section's title and the gap under it
 local TOP_ROOM = 64 -- heading, search
-local GAME_ROW = 28 -- (the game look: the buttons on a line of their own, the search under them)
-local function TopRoom() return TOP_ROOM + ((W.Skin.GameWindows and W.Skin.GameWindows()) and GAME_ROW or 0) end
+local GAME_TOP_ROOM = 62 -- (the game look: the title in the bar; the buttons on a line of their own, the search under them)
+local function TopRoom() return (W.Skin.GameWindows and W.Skin.GameWindows()) and GAME_TOP_ROOM or TOP_ROOM end
+local GAME_ROW = 28 -- (the game look: the buttons' line)
 local BOTTOM_ROOM = 28 -- the footer strip: sorting, arrangement, free slots, gold
 local MIN_COLUMNS, MAX_COLUMNS = 6, 16 -- (as the option's slider)
 -- (a title's "..." at its right end, the kit's room kept for it: asked when drawn, never as an older Wanderer loads)
