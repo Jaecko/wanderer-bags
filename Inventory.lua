@@ -24,6 +24,8 @@ local SECTION_GAP = 8
 local HEADER_HEIGHT = 20
 local HEADER_ROOM = HEADER_HEIGHT + 4 -- a section's title and the gap under it
 local TOP_ROOM = 64 -- heading, search
+local GAME_ROW = 28 -- (the game look: the buttons on a line of their own, the search under them)
+local function TopRoom() return TOP_ROOM + ((W.Skin.GameWindows and W.Skin.GameWindows()) and GAME_ROW or 0) end
 local BOTTOM_ROOM = 28 -- the footer strip: sorting, arrangement, free slots, gold
 local MIN_COLUMNS, MAX_COLUMNS = 6, 16 -- (as the option's slider)
 -- (a title's "..." at its right end, the kit's room kept for it: asked when drawn, never as an older Wanderer loads)
@@ -1347,7 +1349,7 @@ function ns.NewInventory(spec)
 			bar:SetPoint("BOTTOMLEFT", window, "BOTTOMLEFT", margin, margin + BOTTOM_ROOM + hintRoom)
 		end
 		local barHeight = bar and self.LayoutBar(width) or 0
-		local fullHeight = height + TOP_ROOM + BOTTOM_ROOM + hintRoom + barHeight + margin * 2
+		local fullHeight = height + TopRoom() + BOTTOM_ROOM + hintRoom + barHeight + margin * 2
 		window:SetSize(width + margin * 2, fullHeight)
 		-- (widened by its corner: from six squares a row, or what its heading and footer need, to sixteen; its
 		-- height its own)
@@ -1381,8 +1383,8 @@ function ns.NewInventory(spec)
 	-- The links shown, right to left from the "?" and the cross, without a gap for the hidden ones.
 	function self.ChainLinks()
 		local previous
-		-- (the game look: the title in the game's bar, its links are the game's buttons: on the search's line, right to
-		-- left from the selection's button, the search up to them)
+		-- (the game look: the title in the game's bar, its links are the game's buttons: on a line of their own, right
+		-- to left from the selection's button, the search the whole width under them)
 		local game = W.Skin.GameWindows and W.Skin.GameWindows() and window and window.titleText and searchBox
 		for _, link in ipairs(links) do
 			link:ClearAllPoints()
@@ -1401,10 +1403,8 @@ function ns.NewInventory(spec)
 		end
 		if game then
 			searchBox:ClearAllPoints()
-			searchBox:SetPoint("TOPLEFT", window.titleText, "BOTTOMLEFT", 0, -8)
-			local edge = previous or selectButton
-			if edge then searchBox:SetPoint("RIGHT", edge, "LEFT", -6, 0)
-			else searchBox:SetPoint("RIGHT", window, "RIGHT", -(W.Skin.Margin() + 8), 0) end
+			searchBox:SetPoint("TOPLEFT", window.titleText, "BOTTOMLEFT", 0, -8 - ((previous or selectButton) and GAME_ROW or 0))
+			searchBox:SetPoint("RIGHT", window, "RIGHT", -(W.Skin.Margin() + 8), 0)
 		end
 	end
 
@@ -1770,7 +1770,7 @@ function ns.NewInventory(spec)
 		end
 		self.ChainLinks()
 		content = CreateFrame("Frame", nil, window)
-		content:SetPoint("TOPLEFT", window, "TOPLEFT", margin, -(margin + TOP_ROOM))
+		content:SetPoint("TOPLEFT", window, "TOPLEFT", margin, -(margin + TopRoom()))
 		CreateFooter(margin)
 		if spec.footTools then spec.footTools(window, function(tool) footTools[#footTools + 1] = tool end) end
 		if spec.markHint then
