@@ -1648,7 +1648,7 @@ function ns.NewInventory(spec)
 			if not settings or settings.layout == key then return end
 			W.ChangeEverywhere(function() ns.Settings().layout = key end)
 			ns.RefreshAll()
-		end, 22)
+		end, 22, { tabs = true })
 		for _, choice in ipairs(layoutPair.buttons) do
 			W.Skin.Tooltip(choice, choice.key == "bags" and L.MODE_BAGS_DESC or L.MODE_CATEGORIES_DESC, "ANCHOR_TOP")
 		end
